@@ -76,3 +76,40 @@ export function selectPageForOffset(
   }
   return { pageIndex: pages.length - 1, page: pages[pages.length - 1] }
 }
+
+/**
+ * Resolve a chapter jump to a book-wide page index.
+ * Prefer normalized startOffset; if that misses the title in body, locate by title.
+ * Returns null when neither offset nor title can be resolved.
+ */
+export function resolveChapterJumpPageIndex(
+  pages: string[],
+  text: string,
+  chapter: { startOffset: number; title: string }
+): number | null {
+  if (pages.length === 0 || !text) return null
+
+  const title = chapter.title?.trim() ?? ''
+  const titleAt = title ? text.indexOf(title) : -1
+
+  let offset: number | null = null
+  if (chapter.startOffset >= 0 && chapter.startOffset <= text.length) {
+    offset = chapter.startOffset
+    // If title exists in body but not near this offset, prefer title location
+    // (covers legacy imports where offsets were computed on differently normalized text).
+    if (titleAt >= 0) {
+      const around = text.slice(
+        Math.max(0, offset - 2),
+        Math.min(text.length, offset + title.length + 8)
+      )
+      if (!around.includes(title)) {
+        offset = titleAt
+      }
+    }
+  } else if (titleAt >= 0) {
+    offset = titleAt
+  }
+
+  if (offset == null) return null
+  return selectPageForOffset(pages, offset).pageIndex
+}

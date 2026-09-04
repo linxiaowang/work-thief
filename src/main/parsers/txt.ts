@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { decodeBuffer, decodeWithPreference, type Encoding } from './encoding'
 import { detectChapters, sliceChapters } from './chapters'
+import { normalizeNovelText } from './normalize'
 import type { PreferredEncoding } from '@shared/types'
 
 export interface ParsedBook {
@@ -36,6 +37,8 @@ export async function parseTxtFile(
 
 /**
  * Parse already-decoded text. Useful for tests and in-memory rewrites.
+ * Normalizes line endings before chapter detection so startOffset matches
+ * the reading string used by loadBookPages.
  */
 export function parseTxtText(
   text: string,
@@ -43,8 +46,9 @@ export function parseTxtText(
   encoding: Encoding = 'utf-8',
   _fileSize: number = text.length
 ): ParsedBook {
-  const detected = detectChapters(text)
-  const slices = sliceChapters(text, detected)
+  const normalized = normalizeNovelText(text)
+  const detected = detectChapters(normalized)
+  const slices = sliceChapters(normalized, detected)
   const chapters = detected.map((c, i) => ({
     index: i,
     title: c.title,
@@ -56,7 +60,7 @@ export function parseTxtText(
   return {
     title,
     encoding,
-    totalChars: text.length,
+    totalChars: normalized.length,
     chapters
   }
 }

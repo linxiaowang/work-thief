@@ -4,7 +4,8 @@ import { getBook } from './db/books'
 import { listChapters, getChapter } from './db/chapters'
 import { getProgress, upsertProgress } from './db/progress'
 import { getSettings } from './db/settings'
-import { paginate, selectPageForOffset } from './pagination'
+import { paginate, selectPageForOffset, resolveChapterJumpPageIndex } from './pagination'
+import { normalizeNovelText } from './parsers/normalize'
 
 /**
  * MenuBar — owns the macOS menu bar item and all reading state.
@@ -183,11 +184,8 @@ export async function loadBookPages(): Promise<void> {
   const { decodeWithPreference } = await import('./parsers/encoding')
   const { text } = decodeWithPreference(buf, settings.preferredEncoding)
 
-  cachedBookText = text
-    .replace(/\r\n/g, '\n')
-    .replace(/\n/g, ' ')
-    .replace(/\r/g, ' ')
-    .replace(/　+/g, ' ')
+  // Same normalization as import-time detectChapters — keep newlines so offsets align.
+  cachedBookText = normalizeNovelText(text)
   cachedPages = paginate(cachedBookText, settings.charsPerPage)
   cachedBookKey = key
 
@@ -279,13 +277,49 @@ export async function prevChapter(): Promise<void> {
 /** Optional chapter jump — maps chapter start offset → book-wide page. */
 export async function jumpToChapter(chapterIndex: number): Promise<void> {
   if (!state || state.bookId < 0) return
-  if (state.hidden) state.hidden = false
+  // Force exit Boss disguise so novel text shows immediately after jump.
+  state.hidden = false
   await loadBookPages()
   const chapter = getChapter(state.bookId, chapterIndex)
-  if (!chapter || !cachedBookText) return
+  if (!chapter || !cachedBookText || cachedPages.length === 0) {
+    console.error('[WorkThief] jumpToChapter failed: missing chapter/pages', {
+      chapterIndex,
+      hasChapter: !!chapter,
+      hasText: !!cachedBookText,
+      pageCount: cachedPages.length
+    })
+    failJump()
+    return
+  }
+
+  const pageIndex = resolveChapterJumpPageIndex(cachedPages, cachedBookText, chapter)
+  if (pageIndex == null || cachedPages[pageIndex] == null) {
+    console.error('[WorkThief] jumpToChapter failed: could not resolve page', {
+      chapterIndex,
+      title: chapter.title,
+      startOffset: chapter.startOffset,
+      textLength: cachedBookText.length,
+      pageCount: cachedPages.length
+    })
+    failJump()
+    return
+  }
+
   state.chapterIndex = chapterIndex
-  state.pageIndex = selectPageForOffset(cachedPages, chapter.startOffset).pageIndex
+  state.pageIndex = pageIndex
+  // Immediate novel title (Boss already cleared).
   render()
+  persistProgress()
+}
+
+/** Show jump failure on tray; fall back to first page for recovery. */
+function failJump(): void {
+  if (!state) return
+  state.pageIndex = 0
+  state.hidden = false
+  if (tray) {
+    tray.setTitle('跳转失败')
+  }
   persistProgress()
 }
 
@@ -362,6 +396,8 @@ function persistProgress(): void {
 }
 
 function truncateForMenuBar(text: string): string {
-  if (text.length <= 80) return text
-  return text.slice(0, 77) + '…'
+  // Collapse newlines at display time only — reading string keeps them for offsets.
+  const oneLine = text.replace(/\s*\n\s*/g, ' ').replace(/　+/g, ' ').trim()
+  if (oneLine.length <= 80) return oneLine
+  return oneLine.slice(0, 77) + '…'
 }
