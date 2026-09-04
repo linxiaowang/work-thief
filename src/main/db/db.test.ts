@@ -302,14 +302,26 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     expect(s.hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
     expect(s.charsPerPage).toBe(40)
     expect(s.watchedFolder).toBeNull()
+    expect(s.moyuText).toBe('Hello')
+    expect(s.showPageNumber).toBe(true)
+    expect(s.preferredEncoding).toBe('auto')
   })
 
   it('updates and persists settings', () => {
-    updateSettings({ charsPerPage: 50, hotkeyNextPage: 'Alt+Cmd+]' })
+    updateSettings({
+      charsPerPage: 50,
+      hotkeyNextPage: 'Alt+Cmd+]',
+      moyuText: '内存占用正常',
+      showPageNumber: false,
+      preferredEncoding: 'gbk'
+    })
     const s = getSettings()
     expect(s.charsPerPage).toBe(50)
     expect(s.hotkeyNextPage).toBe('Alt+Cmd+]')
     expect(s.hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
+    expect(s.moyuText).toBe('内存占用正常')
+    expect(s.showPageNumber).toBe(false)
+    expect(s.preferredEncoding).toBe('gbk')
   })
 
   it('clamps charsPerPage to valid ranges', () => {
@@ -320,9 +332,10 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
   })
 
   it('resets to defaults', () => {
-    updateSettings({ charsPerPage: 60, hotkeyToggleHidden: 'X' })
+    updateSettings({ charsPerPage: 60, hotkeyToggleHidden: 'X', moyuText: 'x' })
     resetSettings()
     expect(getSettings().charsPerPage).toBe(40)
     expect(getSettings().hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
+    expect(getSettings().moyuText).toBe('Hello')
   })
 })

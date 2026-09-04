@@ -60,21 +60,21 @@ progress(book_id PK, chapter_index, chapter_progress /*0..1*/, last_read_at)
 settings(key, value /* JSON AppSettings */)
 ```
 
-AppSettings：热键五键 + watchedFolder + charsPerPage（默认 40，钳制 20–80）。
+AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber + preferredEncoding。
 
-进度：存章内字符比例，切回书时用 selectPageForOffset 近似还原页码。
+进度：存全书字符比例；chapterIndex 仅服务可选跳转。
 
 ---
 
 ## 4. 阅读流
 
 1. 启动 → ensureWatchedFolder + resumeWatching → initTray → 最近打开的书 switchToBook
-2. loadCurrentChapterPages：读文件 → 解码 → 按章节 offset 切片 → paginate(charsPerPage)
-3. Tray.setTitle(章节号 + 页正文)；过长截到约 80 字
-4. 热键 / 菜单翻页；跨章自动接上；末章末页绕回首章
-5. Boss Key：hidden=true → setTitle("")，图标保留
+2. loadBookPages：整书解码 → 按 charsPerPage 全书切页
+3. Tray.setTitle(页正文 [+ 页码/总页])；过长约 80 字截断
+4. 热键 / 菜单翻页（全书页）；章节跳转可选
+5. Boss Key：小说 ↔ moyu_text 伪装（不 blank-only）
 
-空书架：标题显示短提示「WorkThief · 放 txt」。
+空书架：WorkThief · 选 txt；文件选择器选书。
 
 ---
 

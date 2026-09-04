@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>WorkThief 设置</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      margin: 0;
+      padding: 16px 18px 14px;
+      color: #1d1d1f;
+      background: #f5f5f7;
+      user-select: none;
+    }
+    h1 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 14px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: #6e6e73;
+      margin: 10px 0 4px;
+    }
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #d2d2d7;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .row input { flex: 1; }
+    button {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      background: #e8e8ed;
+      color: #1d1d1f;
+    }
+    button.primary {
+      background: #0071e3;
+      color: #fff;
+    }
+    button:active { opacity: 0.85; }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      font-size: 13px;
+      color: #1d1d1f;
+    }
+    .check input { width: auto; }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    .hint {
+      font-size: 11px;
+      color: #8e8e93;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>设置</h1>
+
+  <label>小说路径</label>
+  <div class="row">
+    <input id="novelPath" type="text" readonly placeholder="尚未选择 TXT" />
+    <button id="pickBtn" type="button">选择…</button>
+  </div>
+  <div class="hint" id="novelTitle"></div>
+
+  <label>每页字数 (page_size)</label>
+  <input id="charsPerPage" type="number" min="20" max="80" step="1" />
+
+  <label>编码</label>
+  <select id="encoding">
+    <option value="auto">自动</option>
+    <option value="utf-8">UTF-8</option>
+    <option value="gbk">GBK</option>
+  </select>
+
+  <label>Boss 伪装文字 (moyu_text)</label>
+  <input id="moyuText" type="text" placeholder="留空则显示当前时间 HH:mm" />
+  <div class="hint">Boss Key 在小说文字与伪装文字之间切换（不会只清空标题）</div>
+
+  <label class="check">
+    <input id="showPageNumber" type="checkbox" />
+    显示页码（当前页 / 总页）
+  </label>
+
+  <div class="actions">
+    <button id="cancelBtn" type="button">取消</button>
+    <button id="saveBtn" class="primary" type="button">保存</button>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron')
+
+    function apply(data) {
+      document.getElementById('novelPath').value = data.novelPath || ''
+      document.getElementById('novelTitle').textContent = data.novelTitle || ''
+      document.getElementById('charsPerPage').value = data.charsPerPage ?? 40
+      document.getElementById('encoding').value = data.preferredEncoding || 'auto'
+      document.getElementById('moyuText').value = data.moyuText ?? 'Hello'
+      document.getElementById('showPageNumber').checked = !!data.showPageNumber
+    }
+
+    ipcRenderer.on('settings:data', (_e, data) => apply(data))
+    ipcRenderer.invoke('settings:get').then(apply).catch(() => {})
+
+    document.getElementById('pickBtn').onclick = () => {
+      ipcRenderer.invoke('settings:pick-novel').catch(() => {})
+    }
+    document.getElementById('cancelBtn').onclick = () => {
+      ipcRenderer.invoke('settings:close')
+    }
+    document.getElementById('saveBtn').onclick = async () => {
+      await ipcRenderer.invoke('settings:save', {
+        charsPerPage: Number(document.getElementById('charsPerPage').value),
+        preferredEncoding: document.getElementById('encoding').value,
+        moyuText: document.getElementById('moyuText').value,
+        showPageNumber: document.getElementById('showPageNumber').checked
+      })
+      ipcRenderer.invoke('settings:close')
+    }
+  </script>
+</body>
+</html>

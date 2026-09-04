@@ -1,8 +1,7 @@
 /**
  * Shared types for the menu-bar novel reader.
  *
- * Menu-bar only — no Dock, no reading window, no Popover. Body text
- * is rendered via Tray.setTitle(); navigation is a right-click menu.
+ * Menu-bar only — body text via Tray.setTitle(); navigation is a tray menu.
  */
 
 export interface Book {
@@ -30,11 +29,15 @@ export interface Chapter {
 
 export interface Progress {
   bookId: number
+  /** Kept for optional chapter jump UI; book-wide paging uses chapterProgress. */
   chapterIndex: number
-  /** 0..1 fraction through the current chapter (used to restore page). */
+  /** 0..1 fraction through the whole book text (used to restore page). */
   chapterProgress: number
   lastReadAt: number
 }
+
+/** Forced TXT decode; auto uses heuristic detection. */
+export type PreferredEncoding = 'auto' | 'utf-8' | 'gbk'
 
 export interface AppSettings {
   hotkeyNextPage: string
@@ -43,8 +46,14 @@ export interface AppSettings {
   hotkeyPrevChapter: string
   hotkeyToggleHidden: string
   watchedFolder: string | null
-  /** Characters shown per menu-bar "page". */
+  /** Characters shown per menu-bar "page" (Thief page_size). */
   charsPerPage: number
+  /** Boss Key disguise text (Thief moyu_text). Empty → show current HH:mm. */
+  moyuText: string
+  /** Append " N/total" after page body when true. */
+  showPageNumber: boolean
+  /** How to decode TXT files. */
+  preferredEncoding: PreferredEncoding
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -54,7 +63,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkeyPrevChapter: 'Alt+Cmd+Up',
   hotkeyToggleHidden: 'Ctrl+Alt+Cmd+M',
   watchedFolder: null,
-  charsPerPage: 40
+  charsPerPage: 40,
+  moyuText: 'Hello',
+  showPageNumber: true,
+  preferredEncoding: 'auto'
 }
 
 export interface ImportResult {

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import type { ImportResult } from '@shared/types'
 import { insertBook, getBookByPath, listBooks, markBookMissing } from './db/books'
 import { parseTxtFile, coverColorFor } from './parsers/txt'
+import { getSettings } from './db/settings'
 
 /**
  * Import helpers used by the folder watcher.
@@ -23,7 +24,7 @@ export async function importPaths(paths: string[]): Promise<ImportResult> {
         failed.push({ path: filePath, reason: '已在书架' })
         continue
       }
-      const parsed = await parseTxtFile(filePath)
+      const parsed = await parseTxtFile(filePath, undefined, getSettings().preferredEncoding)
       const inserted = insertBook({
         title: parsed.title || basename(filePath).replace(/\.txt$/i, ''),
         filePath,

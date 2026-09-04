@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
-import { decodeBuffer, type Encoding } from './encoding'
+import { decodeBuffer, decodeWithPreference, type Encoding } from './encoding'
 import { detectChapters, sliceChapters } from './chapters'
+import type { PreferredEncoding } from '@shared/types'
 
 export interface ParsedBook {
   title: string
@@ -21,10 +22,15 @@ export interface ParsedBook {
  * @param filePath Absolute path to the .txt file
  * @param title Optional override for the displayed book title
  */
-export async function parseTxtFile(filePath: string, title?: string): Promise<ParsedBook> {
+export async function parseTxtFile(
+  filePath: string,
+  title?: string,
+  preferred: PreferredEncoding = 'auto'
+): Promise<ParsedBook> {
   const buf = await readFile(filePath)
   const fileStat = await stat(filePath)
-  const { text, encoding } = decodeBuffer(buf)
+  const { text, encoding } =
+    preferred === 'auto' ? decodeBuffer(buf) : decodeWithPreference(buf, preferred)
   return parseTxtText(text, title ?? deriveTitleFromPath(filePath), encoding, fileStat.size)
 }
 

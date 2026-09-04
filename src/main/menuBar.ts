@@ -9,23 +9,25 @@ import { paginate, selectPageForOffset } from './pagination'
 /**
  * MenuBar — owns the macOS menu bar item and all reading state.
  *
- * The tray icon stays put. Title text shows the current page.
- * Boss Key clears the title but leaves the icon.
+ * Tray icon stays put. Title shows the current book-wide page.
+ * Boss Key toggles novel text ↔ disguise (moyu_text), never blank-only.
  */
 
 export interface MenuBarState {
   bookId: number
-  chapterIndex: number
+  /** Book-wide page index (0-based). */
   pageIndex: number
+  /** Optional chapter highlight for jump UI. */
+  chapterIndex: number
+  /** Boss disguise mode. */
   hidden: boolean
 }
 
 /** Short empty-shelf hint — long Chinese+arrow strings get clipped / hard to spot. */
-const EMPTY_HINT = 'WorkThief · 放 txt'
+const EMPTY_HINT = 'WorkThief · 选 txt'
 
 /**
  * 16×16 teal/orange book + white W — non-template color fallback.
- * Must stay clearly opaque (not near-transparent / all-black template).
  */
 const EMBEDDED_COLOR_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAtElEQVR4XmNgoAYQsbH5Tw6G2w3SfCdO7P/5VIX/OpOn/tedPO2/3uQpeNkgPVgN+A8E/EuX/hdYuvg/39IlWNkgNXgN0J0EdMEkoAsmAV2DhU3QAP7lQBcsB7pgOdAFWNgEDdCdCHTBRKALJk4FqQUDEBsmTtAA/mVAFyxbDNaIi40/DICxALYVLUZAYqDYIegCkAJcsQDz0hCKBeQYISoW+JYB4x4aC/jYGGFAUWaiJEcDAFrfzjkeNFsnAAAAAElFTkSuQmCC'
@@ -33,8 +35,9 @@ const EMBEDDED_COLOR_PNG =
 let tray: Tray | null = null
 let state: MenuBarState | null = null
 let cachedPages: string[] = []
-let cachedChapterText: string | null = null
-let cachedChapterKey: string | null = null
+let cachedBookText: string | null = null
+let cachedBookKey: string | null = null
+let onNeedChooseNovel: (() => void) | null = null
 
 export function getTray(): Tray | null {
   return tray
@@ -44,8 +47,12 @@ export function getState(): MenuBarState | null {
   return state
 }
 
+/** Wire first-run / empty-shelf click → file picker. */
+export function setChooseNovelHandler(fn: () => void): void {
+  onNeedChooseNovel = fn
+}
+
 function resolveTrayIcon(): Electron.NativeImage | null {
-  // Prefer template (macOS status-item standard) over color PNG — color icons often fail to paint.
   const candidates = [
     join(process.cwd(), 'resources/iconTemplate.png'),
     join(app.getAppPath(), 'resources/iconTemplate.png'),
@@ -62,7 +69,9 @@ function resolveTrayIcon(): Electron.NativeImage | null {
       if (path.includes('iconTemplate')) {
         icon.setTemplateImage(true)
       }
-      console.log(`[WorkThief] tray icon chosen: ${path} isEmpty=${icon.isEmpty()} template=${path.includes('iconTemplate')}`)
+      console.log(
+        `[WorkThief] tray icon chosen: ${path} isEmpty=${icon.isEmpty()} template=${path.includes('iconTemplate')}`
+      )
       return icon
     }
   }
@@ -75,14 +84,12 @@ function resolveTrayIcon(): Electron.NativeImage | null {
 
 export function initTray(): void {
   // Reliable macOS text status-item: create with empty image FIRST, then setTitle.
-  // Colored PNGs often fail to paint; empty + title is the pattern that shows up.
   tray = new Tray(nativeImage.createEmpty())
   tray.setIgnoreDoubleClickEvents(true)
   tray.setToolTip('WorkThief')
   tray.setTitle(EMPTY_HINT)
   console.log(`[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())}`)
 
-  // Optional image after title is mounted — prefer template over color.
   try {
     let icon = resolveTrayIcon()
     if (icon && !icon.isEmpty()) {
@@ -107,18 +114,22 @@ export function initTray(): void {
   } catch (err) {
     console.log('[WorkThief] tray.getBounds unavailable', err)
   }
+
+  tray.on('click', () => {
+    if (!state || state.bookId < 0) {
+      onNeedChooseNovel?.()
+    }
+  })
 }
 
 export function setState(newState: MenuBarState): void {
   if (!tray) return
-
-  const chapterChanged =
-    !state || state.bookId !== newState.bookId || state.chapterIndex !== newState.chapterIndex
+  const bookChanged = !state || state.bookId !== newState.bookId
   state = newState
-  if (chapterChanged) {
-    cachedChapterText = null
+  if (bookChanged) {
+    cachedBookText = null
     cachedPages = []
-    cachedChapterKey = null
+    cachedBookKey = null
   }
   render()
   persistProgress()
@@ -127,7 +138,7 @@ export function setState(newState: MenuBarState): void {
 export function render(): void {
   if (!tray || !state) return
   if (state.hidden) {
-    tray.setTitle('')
+    tray.setTitle(truncateForMenuBar(resolveDisguiseText()))
     return
   }
   if (state.bookId < 0) {
@@ -140,128 +151,140 @@ export function render(): void {
     tray.setTitle('…')
     return
   }
-  const chapter = getChapter(state.bookId, state.chapterIndex)
-  const chapterLabel = chapter ? `${state.chapterIndex + 1}. ` : ''
-  tray.setTitle(truncateForMenuBar(chapterLabel + page))
+  const settings = getSettings()
+  let title = page
+  if (settings.showPageNumber && cachedPages.length > 0) {
+    title = `${page}  ${state.pageIndex + 1}/${cachedPages.length}`
+  }
+  tray.setTitle(truncateForMenuBar(title))
 }
 
-export async function loadCurrentChapterPages(): Promise<void> {
+/** Boss disguise: custom moyu_text, or current HH:mm when empty. */
+export function resolveDisguiseText(): string {
+  const raw = getSettings().moyuText?.trim() ?? ''
+  if (raw) return raw
+  const now = new Date()
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+export async function loadBookPages(): Promise<void> {
   if (!state || state.bookId < 0) return
-  const key = `${state.bookId}:${state.chapterIndex}`
-  if (cachedChapterKey === key && cachedPages.length > 0) return
+  const settings = getSettings()
+  const key = `${state.bookId}:${settings.charsPerPage}:${settings.preferredEncoding}`
+  if (cachedBookKey === key && cachedPages.length > 0) return
 
   const book = getBook(state.bookId)
   if (!book) return
-  const chapter = getChapter(state.bookId, state.chapterIndex)
-  if (!chapter) return
 
   const { readFile } = await import('node:fs/promises')
   const buf = await readFile(book.filePath)
-  const { decodeBuffer } = await import('./parsers/encoding')
-  const { text } = decodeBuffer(buf)
-  const allChapters = listChapters(state.bookId)
-  const nextCh = allChapters.find((c) => c.index === state!.chapterIndex + 1)
-  const slice = text.slice(chapter.startOffset, nextCh ? nextCh.startOffset : text.length)
-  cachedChapterText = slice
-  const chars = getSettings().charsPerPage
-  cachedPages = paginate(slice, chars)
-  cachedChapterKey = key
+  const { decodeWithPreference } = await import('./parsers/encoding')
+  const { text } = decodeWithPreference(buf, settings.preferredEncoding)
+
+  cachedBookText = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\n/g, ' ')
+    .replace(/\r/g, ' ')
+    .replace(/　+/g, ' ')
+  cachedPages = paginate(cachedBookText, settings.charsPerPage)
+  cachedBookKey = key
 
   if (state.pageIndex >= cachedPages.length) {
     state.pageIndex = Math.max(0, cachedPages.length - 1)
   }
+  syncChapterIndexFromOffset()
   render()
 }
 
-/** Re-split pages after charsPerPage changes; keep approximate position. */
+/** Re-split after charsPerPage / encoding change; keep approximate position. */
 export async function reloadPagination(): Promise<void> {
-  if (!state || !cachedChapterText) return
+  if (!state || state.bookId < 0) return
   let charsBefore = 0
   for (let i = 0; i < state.pageIndex && i < cachedPages.length; i++) {
     charsBefore += cachedPages[i].length
   }
-  cachedPages = paginate(cachedChapterText, getSettings().charsPerPage)
-  const selected = selectPageForOffset(cachedPages, charsBefore)
-  state.pageIndex = selected.pageIndex
+  cachedBookKey = null
+  await loadBookPages()
+  if (cachedPages.length > 0) {
+    state.pageIndex = selectPageForOffset(cachedPages, charsBefore).pageIndex
+  }
+  syncChapterIndexFromOffset()
   render()
   persistProgress()
 }
 
 export async function nextPage(): Promise<void> {
-  if (!state || state.bookId < 0) return
-  await loadCurrentChapterPages()
+  if (!state) return
+  if (state.bookId < 0) {
+    onNeedChooseNovel?.()
+    return
+  }
+  // Leaving boss mode on page turn (Thief-style: paging shows novel again).
+  if (state.hidden) {
+    state.hidden = false
+  }
+  await loadBookPages()
+  if (cachedPages.length === 0) return
   if (state.pageIndex < cachedPages.length - 1) {
     state.pageIndex++
   } else {
-    const totalChapters = listChapters(state.bookId).length
-    if (state.chapterIndex < totalChapters - 1) {
-      state.chapterIndex++
-      state.pageIndex = 0
-      cachedChapterKey = null
-      await loadCurrentChapterPages()
-    } else {
-      state.chapterIndex = 0
-      state.pageIndex = 0
-      cachedChapterKey = null
-      await loadCurrentChapterPages()
-    }
+    state.pageIndex = 0
   }
+  syncChapterIndexFromOffset()
   render()
   persistProgress()
 }
 
 export async function prevPage(): Promise<void> {
-  if (!state || state.bookId < 0) return
-  await loadCurrentChapterPages()
+  if (!state) return
+  if (state.bookId < 0) {
+    onNeedChooseNovel?.()
+    return
+  }
+  if (state.hidden) {
+    state.hidden = false
+  }
+  await loadBookPages()
+  if (cachedPages.length === 0) return
   if (state.pageIndex > 0) {
     state.pageIndex--
-  } else if (state.chapterIndex > 0) {
-    state.chapterIndex--
-    cachedChapterKey = null
-    await loadCurrentChapterPages()
-    state.pageIndex = Math.max(0, cachedPages.length - 1)
   } else {
-    const totalChapters = listChapters(state.bookId).length
-    state.chapterIndex = Math.max(0, totalChapters - 1)
-    cachedChapterKey = null
-    await loadCurrentChapterPages()
-    state.pageIndex = Math.max(0, cachedPages.length - 1)
+    state.pageIndex = cachedPages.length - 1
   }
+  syncChapterIndexFromOffset()
   render()
   persistProgress()
 }
 
 export async function nextChapter(): Promise<void> {
   if (!state || state.bookId < 0) return
-  const totalChapters = listChapters(state.bookId).length
-  if (state.chapterIndex < totalChapters - 1) {
-    state.chapterIndex++
-    state.pageIndex = 0
-    cachedChapterKey = null
-    await loadCurrentChapterPages()
-    render()
-    persistProgress()
-  }
+  const chapters = listChapters(state.bookId)
+  if (chapters.length === 0) return
+  const next = chapters.find((c) => c.index > state!.chapterIndex)
+  if (!next) return
+  await jumpToChapter(next.index)
 }
 
 export async function prevChapter(): Promise<void> {
   if (!state || state.bookId < 0) return
-  if (state.chapterIndex > 0) {
-    state.chapterIndex--
-    state.pageIndex = 0
-    cachedChapterKey = null
-    await loadCurrentChapterPages()
-    render()
-    persistProgress()
-  }
+  const chapters = listChapters(state.bookId)
+  if (chapters.length === 0) return
+  const prev = [...chapters].reverse().find((c) => c.index < state!.chapterIndex)
+  if (!prev) return
+  await jumpToChapter(prev.index)
 }
 
-export async function jumpToChapter(chapterIndex: number, pageIndex: number = 0): Promise<void> {
+/** Optional chapter jump — maps chapter start offset → book-wide page. */
+export async function jumpToChapter(chapterIndex: number): Promise<void> {
   if (!state || state.bookId < 0) return
+  if (state.hidden) state.hidden = false
+  await loadBookPages()
+  const chapter = getChapter(state.bookId, chapterIndex)
+  if (!chapter || !cachedBookText) return
   state.chapterIndex = chapterIndex
-  state.pageIndex = pageIndex
-  cachedChapterKey = null
-  await loadCurrentChapterPages()
+  state.pageIndex = selectPageForOffset(cachedPages, chapter.startOffset).pageIndex
   render()
   persistProgress()
 }
@@ -279,7 +302,7 @@ export function toggleHidden(): void {
 }
 
 /**
- * Switch book and restore last chapter + approximate page.
+ * Switch book and restore approximate book-wide page from progress fraction.
  */
 export async function switchToBook(bookId: number): Promise<void> {
   const book = getBook(bookId)
@@ -287,15 +310,16 @@ export async function switchToBook(bookId: number): Promise<void> {
   const progress = getProgress(bookId)
   state = {
     bookId,
-    chapterIndex: progress?.chapterIndex ?? 0,
     pageIndex: 0,
+    chapterIndex: progress?.chapterIndex ?? 0,
     hidden: state?.hidden ?? false
   }
-  cachedChapterKey = null
-  await loadCurrentChapterPages()
-  if (progress && cachedChapterText && cachedPages.length > 0) {
-    const approxOffset = Math.floor((progress.chapterProgress ?? 0) * cachedChapterText.length)
+  cachedBookKey = null
+  await loadBookPages()
+  if (progress && cachedBookText && cachedPages.length > 0) {
+    const approxOffset = Math.floor((progress.chapterProgress ?? 0) * cachedBookText.length)
     state.pageIndex = selectPageForOffset(cachedPages, approxOffset).pageIndex
+    syncChapterIndexFromOffset()
   }
   render()
   persistProgress()
@@ -305,15 +329,34 @@ export function getCurrentPages(): string[] {
   return cachedPages
 }
 
+function syncChapterIndexFromOffset(): void {
+  if (!state || state.bookId < 0 || !cachedBookText) return
+  let charsBefore = 0
+  for (let i = 0; i < state.pageIndex && i < cachedPages.length; i++) {
+    charsBefore += cachedPages[i].length
+  }
+  const chapters = listChapters(state.bookId)
+  if (chapters.length === 0) {
+    state.chapterIndex = 0
+    return
+  }
+  let best = chapters[0].index
+  for (const c of chapters) {
+    if (c.startOffset <= charsBefore) best = c.index
+    else break
+  }
+  state.chapterIndex = best
+}
+
 function persistProgress(): void {
   if (!state || state.bookId < 0) return
   let fraction = 0
-  if (cachedChapterText && cachedChapterText.length > 0 && cachedPages.length > 0) {
+  if (cachedBookText && cachedBookText.length > 0 && cachedPages.length > 0) {
     let charsBefore = 0
     for (let i = 0; i < state.pageIndex && i < cachedPages.length; i++) {
       charsBefore += cachedPages[i].length
     }
-    fraction = charsBefore / cachedChapterText.length
+    fraction = charsBefore / cachedBookText.length
   }
   upsertProgress(state.bookId, state.chapterIndex, fraction)
 }

@@ -52,3 +52,21 @@ describe('decodeBuffer', () => {
     expect(text).toBe('')
   })
 })
+
+describe('decodeWithPreference', () => {
+  it('forces UTF-8', async () => {
+    const { decodeWithPreference } = await import('./encoding')
+    const buf = Buffer.from('hello', 'utf-8')
+    const { text, encoding } = decodeWithPreference(buf, 'utf-8')
+    expect(text).toBe('hello')
+    expect(encoding).toBe('utf-8')
+  })
+
+  it('forces GBK', async () => {
+    const { decodeWithPreference } = await import('./encoding')
+    const gbkBytes = Buffer.from([0xc8, 0xfd, 0xcc, 0xe5])
+    const { text, encoding } = decodeWithPreference(gbkBytes, 'gbk')
+    expect(text).toBe('三体')
+    expect(encoding).toBe('gbk')
+  })
+})

@@ -1,5 +1,9 @@
 import { getDb } from './client'
-import { DEFAULT_APP_SETTINGS, type AppSettings } from '@shared/types'
+import {
+  DEFAULT_APP_SETTINGS,
+  type AppSettings,
+  type PreferredEncoding
+} from '@shared/types'
 
 const SETTINGS_KEY = 'app_settings'
 
@@ -30,6 +34,15 @@ export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   if (typeof patch.charsPerPage === 'number') {
     merged.charsPerPage = clampChars(patch.charsPerPage)
   }
+  if (patch.preferredEncoding !== undefined) {
+    merged.preferredEncoding = normalizeEncoding(patch.preferredEncoding)
+  }
+  if (patch.moyuText !== undefined) {
+    merged.moyuText = String(patch.moyuText)
+  }
+  if (patch.showPageNumber !== undefined) {
+    merged.showPageNumber = Boolean(patch.showPageNumber)
+  }
   const d = getDb()
   d.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?)
@@ -57,11 +70,19 @@ function mergeWithDefaults(parsed: Partial<AppSettings>): AppSettings {
     hotkeyPrevChapter: parsed.hotkeyPrevChapter ?? d.hotkeyPrevChapter,
     hotkeyToggleHidden: parsed.hotkeyToggleHidden ?? d.hotkeyToggleHidden,
     watchedFolder: parsed.watchedFolder ?? d.watchedFolder,
-    charsPerPage: clampChars(parsed.charsPerPage ?? d.charsPerPage)
+    charsPerPage: clampChars(parsed.charsPerPage ?? d.charsPerPage),
+    moyuText: parsed.moyuText ?? d.moyuText,
+    showPageNumber: parsed.showPageNumber ?? d.showPageNumber,
+    preferredEncoding: normalizeEncoding(parsed.preferredEncoding ?? d.preferredEncoding)
   }
 }
 
 function clampChars(n: number): number {
   if (!Number.isFinite(n)) return DEFAULT_APP_SETTINGS.charsPerPage
   return Math.max(MIN_CHARS, Math.min(MAX_CHARS, Math.round(n)))
+}
+
+function normalizeEncoding(v: string): PreferredEncoding {
+  if (v === 'utf-8' || v === 'gbk' || v === 'auto') return v
+  return 'auto'
 }

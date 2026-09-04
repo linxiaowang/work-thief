@@ -1,6 +1,16 @@
 import jschardet from 'jschardet'
+import type { PreferredEncoding } from '@shared/types'
 
-export type Encoding = 'utf-8' | 'utf-16le' | 'utf-16be' | 'gbk' | 'big5' | 'shift_jis' | 'euc-kr' | 'iso-8859-1' | 'windows-1252'
+export type Encoding =
+  | 'utf-8'
+  | 'utf-16le'
+  | 'utf-16be'
+  | 'gbk'
+  | 'big5'
+  | 'shift_jis'
+  | 'euc-kr'
+  | 'iso-8859-1'
+  | 'windows-1252'
 
 /**
  * Decode a Buffer to a UTF-8 string, auto-detecting the source encoding.
@@ -37,17 +47,38 @@ export function decodeBuffer(buf: Buffer): { text: string; encoding: Encoding } 
   const guess = (detected?.encoding ?? '').toLowerCase()
 
   const encoding = pickEncoding(guess, confidence, sample)
-  const decoder = (globalThis as any).TextDecoder
+  return { text: decodeAs(buf, encoding), encoding }
+}
+
+/**
+ * Decode with an explicit preference (settings UTF-8 / GBK), or auto-detect.
+ */
+export function decodeWithPreference(
+  buf: Buffer,
+  preferred: PreferredEncoding = 'auto'
+): { text: string; encoding: Encoding } {
+  if (preferred === 'utf-8') {
+    if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+      return { text: buf.subarray(3).toString('utf-8'), encoding: 'utf-8' }
+    }
+    return { text: decodeAs(buf, 'utf-8'), encoding: 'utf-8' }
+  }
+  if (preferred === 'gbk') {
+    return { text: decodeAs(buf, 'gbk'), encoding: 'gbk' }
+  }
+  return decodeBuffer(buf)
+}
+
+function decodeAs(buf: Buffer, encoding: Encoding): string {
+  const decoder = (globalThis as { TextDecoder?: typeof TextDecoder }).TextDecoder
     ? new TextDecoder(encoding, { fatal: false })
     : null
-
-  let text: string
-  if (decoder) {
-    text = decoder.decode(buf)
-  } else {
-    text = buf.toString(encoding as BufferEncoding)
+  if (decoder) return decoder.decode(buf)
+  try {
+    return buf.toString(encoding as BufferEncoding)
+  } catch {
+    return buf.toString('utf-8')
   }
-  return { text, encoding: encoding as Encoding }
 }
 
 function pickEncoding(guess: string, confidence: number, sample: Buffer): Encoding {
@@ -62,7 +93,7 @@ function pickEncoding(guess: string, confidence: number, sample: Buffer): Encodi
     gb2312: 'gbk',
     gb18030: 'gbk',
     big5: 'big5',
-    'shift_jis': 'shift_jis',
+    shift_jis: 'shift_jis',
     'euc-kr': 'euc-kr',
     'iso-8859-1': 'iso-8859-1',
     'windows-1252': 'windows-1252'
@@ -78,7 +109,7 @@ function pickEncoding(guess: string, confidence: number, sample: Buffer): Encodi
   for (let i = 0; i < sample.length; i++) {
     if (sample[i] >= 0x80) highBytes++
   }
-  if (highBytes / sample.length > 0.2) {
+  if (sample.length > 0 && highBytes / sample.length > 0.2) {
     return 'gbk'
   }
 
