@@ -12,6 +12,9 @@ import { normalizeNovelText } from './parsers/normalize'
  *
  * Tray icon stays put. Title shows the current book-wide page.
  * Boss Key toggles novel text ↔ disguise (moyu_text), never blank-only.
+ *
+ * Page hot path is sync: pages stay in memory after load; next/prev only
+ * bump pageIndex + setTitle; SQLite persist is debounced.
  */
 
 export interface MenuBarState {
@@ -27,6 +30,8 @@ export interface MenuBarState {
 /** Short empty-shelf hint — long Chinese+arrow strings get clipped / hard to spot. */
 const EMPTY_HINT = 'WorkThief · 选 txt'
 
+const PERSIST_DEBOUNCE_MS = 800
+
 /**
  * 16×16 teal/orange book + white W — non-template color fallback.
  */
@@ -39,6 +44,8 @@ let cachedPages: string[] = []
 let cachedBookText: string | null = null
 let cachedBookKey: string | null = null
 let onNeedChooseNovel: (() => void) | null = null
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+let onRightClickMenu: (() => void) | null = null
 
 export function getTray(): Tray | null {
   return tray
@@ -51,6 +58,11 @@ export function getState(): MenuBarState | null {
 /** Wire first-run / empty-shelf click → file picker. */
 export function setChooseNovelHandler(fn: () => void): void {
   onNeedChooseNovel = fn
+}
+
+/** Wire right-click → popUpContextMenu (built in index). */
+export function setRightClickHandler(fn: () => void): void {
+  onRightClickMenu = fn
 }
 
 function resolveTrayIcon(): Electron.NativeImage | null {
@@ -116,10 +128,18 @@ export function initTray(): void {
     console.log('[WorkThief] tray.getBounds unavailable', err)
   }
 
+  // Thief-style: left click pages (or picker); right click opens menu.
+  // Do NOT call tray.setContextMenu — that steals left-click.
   tray.on('click', () => {
     if (!state || state.bookId < 0) {
       onNeedChooseNovel?.()
+    } else {
+      nextPage()
     }
+  })
+
+  tray.on('right-click', () => {
+    onRightClickMenu?.()
   })
 }
 
@@ -133,7 +153,7 @@ export function setState(newState: MenuBarState): void {
     cachedBookKey = null
   }
   render()
-  persistProgress()
+  schedulePersistProgress()
 }
 
 export function render(): void {
@@ -156,6 +176,10 @@ export function render(): void {
   let title = page
   if (settings.showPageNumber && cachedPages.length > 0) {
     title = `${page}  ${state.pageIndex + 1}/${cachedPages.length}`
+  }
+  // Last page: stop (no wrap) + optional 「·完」 suffix.
+  if (cachedPages.length > 0 && state.pageIndex >= cachedPages.length - 1) {
+    title = `${title}·完`
   }
   tray.setTitle(truncateForMenuBar(title))
 }
@@ -210,10 +234,14 @@ export async function reloadPagination(): Promise<void> {
   }
   syncChapterIndexFromOffset()
   render()
-  persistProgress()
+  schedulePersistProgress()
 }
 
-export async function nextPage(): Promise<void> {
+/**
+ * Sync page hot path: memory only — no loadBookPages, no listChapters, no SQLite.
+ * Persist is debounced. At last page: STOP (do not wrap).
+ */
+export function nextPage(): void {
   if (!state) return
   if (state.bookId < 0) {
     onNeedChooseNovel?.()
@@ -223,19 +251,17 @@ export async function nextPage(): Promise<void> {
   if (state.hidden) {
     state.hidden = false
   }
-  await loadBookPages()
   if (cachedPages.length === 0) return
   if (state.pageIndex < cachedPages.length - 1) {
     state.pageIndex++
-  } else {
-    state.pageIndex = 0
   }
-  syncChapterIndexFromOffset()
+  // else: already on last page — stop, still re-render (·完)
   render()
-  persistProgress()
+  schedulePersistProgress()
 }
 
-export async function prevPage(): Promise<void> {
+/** Sync prev; at first page STOP (do not wrap to last). */
+export function prevPage(): void {
   if (!state) return
   if (state.bookId < 0) {
     onNeedChooseNovel?.()
@@ -244,16 +270,12 @@ export async function prevPage(): Promise<void> {
   if (state.hidden) {
     state.hidden = false
   }
-  await loadBookPages()
   if (cachedPages.length === 0) return
   if (state.pageIndex > 0) {
     state.pageIndex--
-  } else {
-    state.pageIndex = cachedPages.length - 1
   }
-  syncChapterIndexFromOffset()
   render()
-  persistProgress()
+  schedulePersistProgress()
 }
 
 export async function nextChapter(): Promise<void> {
@@ -309,7 +331,7 @@ export async function jumpToChapter(chapterIndex: number): Promise<void> {
   state.pageIndex = pageIndex
   // Immediate novel title (Boss already cleared).
   render()
-  persistProgress()
+  schedulePersistProgress(true)
 }
 
 /** Show jump failure on tray; fall back to first page for recovery. */
@@ -320,7 +342,7 @@ function failJump(): void {
   if (tray) {
     tray.setTitle('跳转失败')
   }
-  persistProgress()
+  schedulePersistProgress(true)
 }
 
 export function setHidden(hidden: boolean): void {
@@ -356,11 +378,16 @@ export async function switchToBook(bookId: number): Promise<void> {
     syncChapterIndexFromOffset()
   }
   render()
-  persistProgress()
+  schedulePersistProgress(true)
 }
 
 export function getCurrentPages(): string[] {
   return cachedPages
+}
+
+/** Refresh chapterIndex from current page (for menu checkbox). Not on page hot path. */
+export function syncChapterIndexForMenu(): void {
+  syncChapterIndexFromOffset()
 }
 
 function syncChapterIndexFromOffset(): void {
@@ -382,8 +409,25 @@ function syncChapterIndexFromOffset(): void {
   state.chapterIndex = best
 }
 
+function schedulePersistProgress(immediate = false): void {
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+  if (immediate) {
+    persistProgress()
+    return
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    persistProgress()
+  }, PERSIST_DEBOUNCE_MS)
+}
+
 function persistProgress(): void {
   if (!state || state.bookId < 0) return
+  // Lazily sync chapter highlight before write (not on every page turn render).
+  syncChapterIndexFromOffset()
   let fraction = 0
   if (cachedBookText && cachedBookText.length > 0 && cachedPages.length > 0) {
     let charsBefore = 0
@@ -401,3 +445,5 @@ function truncateForMenuBar(text: string): string {
   if (oneLine.length <= 80) return oneLine
   return oneLine.slice(0, 77) + '…'
 }
+
+export const _internals = { PERSIST_DEBOUNCE_MS, EMPTY_HINT }

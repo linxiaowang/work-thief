@@ -73,6 +73,25 @@
       color: #8e8e93;
       margin-top: 4px;
     }
+    .hotkeys {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid #d2d2d7;
+      border-radius: 8px;
+    }
+    .hotkeys .title {
+      font-size: 12px;
+      color: #6e6e73;
+      margin-bottom: 6px;
+    }
+    .hotkeys .copy {
+      font-size: 13px;
+      color: #1d1d1f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      line-height: 1.45;
+      user-select: text;
+    }
   </style>
 </head>
 <body>
@@ -104,6 +123,12 @@
     显示页码（当前页 / 总页）
   </label>
 
+  <div class="hotkeys">
+    <div class="title">当前快捷键（勿按错）</div>
+    <div class="copy" id="hotkeyCopy">—</div>
+    <div class="hint">章节跳转仅在右键菜单；热键需「辅助功能」权限</div>
+  </div>
+
   <div class="actions">
     <button id="cancelBtn" type="button">取消</button>
     <button id="saveBtn" class="primary" type="button">保存</button>
@@ -119,6 +144,13 @@
       document.getElementById('encoding').value = data.preferredEncoding || 'auto'
       document.getElementById('moyuText').value = data.moyuText ?? 'Hello'
       document.getElementById('showPageNumber').checked = !!data.showPageNumber
+      document.getElementById('hotkeyCopy').textContent =
+        data.hotkeyCopy ||
+        [
+          '下一页 ' + (data.hotkeyNextPage || 'CommandOrControl+Alt+.'),
+          '上一页 ' + (data.hotkeyPrevPage || 'CommandOrControl+Alt+,'),
+          'Boss ' + (data.hotkeyToggleHidden || 'CommandOrControl+Alt+M')
+        ].join('　')
     }
 
     ipcRenderer.on('settings:data', (_e, data) => apply(data))

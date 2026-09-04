@@ -65,6 +65,7 @@ const { insertBook, listBooks, getBookByPath, deleteBook, renameBook } = await i
 const { replaceChapters, listChapters, getChapter } = await import('./chapters')
 const { upsertProgress, getProgress, listAllProgress } = await import('./progress')
 const { getSettings, updateSettings, resetSettings } = await import('./settings')
+const { getDb } = await import('./client')
 
 function makeDb(): any {
   const d = new (Database as any)(':memory:')
@@ -299,7 +300,11 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
 
   it('returns defaults when no settings exist', () => {
     const s = getSettings()
-    expect(s.hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
+    expect(s.hotkeyNextPage).toBe('CommandOrControl+Alt+.')
+    expect(s.hotkeyPrevPage).toBe('CommandOrControl+Alt+,')
+    expect(s.hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
+    expect(s.hotkeyNextChapter).toBe('')
+    expect(s.hotkeyPrevChapter).toBe('')
     expect(s.charsPerPage).toBe(40)
     expect(s.watchedFolder).toBeNull()
     expect(s.moyuText).toBe('Hello')
@@ -318,7 +323,7 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     const s = getSettings()
     expect(s.charsPerPage).toBe(50)
     expect(s.hotkeyNextPage).toBe('Alt+Cmd+]')
-    expect(s.hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
+    expect(s.hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
     expect(s.moyuText).toBe('内存占用正常')
     expect(s.showPageNumber).toBe(false)
     expect(s.preferredEncoding).toBe('gbk')
@@ -335,7 +340,35 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     updateSettings({ charsPerPage: 60, hotkeyToggleHidden: 'X', moyuText: 'x' })
     resetSettings()
     expect(getSettings().charsPerPage).toBe(40)
-    expect(getSettings().hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
+    expect(getSettings().hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
+    expect(getSettings().hotkeyNextPage).toBe('CommandOrControl+Alt+.')
     expect(getSettings().moyuText).toBe('Hello')
+  })
+
+  it('migrates legacy hotkey defaults to Thief-style', () => {
+    const d = getDb()
+    d.prepare(
+      `INSERT INTO settings (key, value) VALUES (?, ?)`
+    ).run(
+      'app_settings',
+      JSON.stringify({
+        hotkeyNextPage: 'Alt+Cmd+Right',
+        hotkeyPrevPage: 'Alt+Cmd+Left',
+        hotkeyNextChapter: 'Alt+Cmd+Down',
+        hotkeyPrevChapter: 'Alt+Cmd+Up',
+        hotkeyToggleHidden: 'Ctrl+Alt+Cmd+M',
+        charsPerPage: 40,
+        moyuText: 'Hello',
+        showPageNumber: true,
+        preferredEncoding: 'auto',
+        watchedFolder: null
+      })
+    )
+    const s = getSettings()
+    expect(s.hotkeyNextPage).toBe('CommandOrControl+Alt+.')
+    expect(s.hotkeyPrevPage).toBe('CommandOrControl+Alt+,')
+    expect(s.hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
+    expect(s.hotkeyNextChapter).toBe('')
+    expect(s.hotkeyPrevChapter).toBe('')
   })
 })

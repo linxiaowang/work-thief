@@ -16,23 +16,35 @@ Need: macOS Node 20+
 ## Verify steps
 
 1. Launch; menu bar RIGHT title (empty shelf hint).
-2. Tray menu Choose novel, or click title when empty; pick txt.
+2. Left-click title when empty → pick txt (or right-click → Choose novel).
 3. Menu bar shows novel text (optional page/total).
-4. Prev/Next page via menu or hotkeys.
-5. Boss: title becomes disguise (default Hello); toggle back. Never blank-only.
-6. Settings: path, page_size, encoding auto/UTF-8/GBK, moyu_text, show page#.
+4. Left-click pages immediately; right-click opens menu.
+5. Hotkeys: ⌘⌥. next / ⌘⌥, prev / ⌘⌥M Boss (macOS; CommandOrControl+Alt).
+6. Boss: title becomes disguise (default Hello); toggle back. Never blank-only.
+7. Settings: path, page_size, encoding auto/UTF-8/GBK, moyu_text, show page#, **current shortcut copy**.
 
 Tray sits on the RIGHT near the clock.
 
-## Tray menu
+## Tray gestures
 
-Open Settings, Choose novel, Bookshelf, Prev/Next, Chapter jump, Boss, Quit
+| Gesture | Action |
+|---|---|
+| Left click | Has book → next page; no book → file picker |
+| Right click | Context menu (Settings / Choose / Bookshelf / Prev·Next / Chapter jump / Boss / Quit) |
+
+Do **not** use `tray.setContextMenu` (that would steal left-click).
 
 ## Hotkeys
 
-Need Accessibility permission, then restart.
+Need Accessibility permission, then restart. On register failure: Notification + tray title hint「开 系统设置→隐私→辅助功能」.
 
-Alt+Cmd+Right/Left = page. Alt+Cmd+Down/Up = chapter. Ctrl+Alt+Cmd+M = Boss.
+| Accelerator | Action |
+|---|---|
+| `CommandOrControl+Alt+.` | Next page |
+| `CommandOrControl+Alt+,` | Prev page |
+| `CommandOrControl+Alt+M` | Boss disguise toggle |
+
+Chapter jump is **menu only** (no chapter hotkeys by default).
 
 ## Watcher bonus
 

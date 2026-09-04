@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { getSettings, updateSettings } from './db/settings'
 import { getState, reloadPagination, render } from './menuBar'
 import { getBook } from './db/books'
-import { applyShortcuts } from './shortcuts'
+import { applyShortcuts, formatShortcutCopy } from './shortcuts'
 import { chooseNovel } from './chooseNovel'
 import type { AppSettings, PreferredEncoding } from '@shared/types'
 
@@ -37,7 +37,7 @@ export function openSettingsWindow(): void {
 
   win = new BrowserWindow({
     width: 420,
-    height: 460,
+    height: 520,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -62,19 +62,27 @@ export function openSettingsWindow(): void {
   })
 }
 
-async function pushSettingsToWindow(): Promise<void> {
-  if (!win || win.isDestroyed()) return
+function settingsPayload() {
   const s = getSettings()
   const state = getState()
   const book = state && state.bookId > 0 ? getBook(state.bookId) : null
-  win.webContents.send('settings:data', {
+  return {
     charsPerPage: s.charsPerPage,
     preferredEncoding: s.preferredEncoding,
     moyuText: s.moyuText,
     showPageNumber: s.showPageNumber,
     novelPath: book?.filePath ?? '',
-    novelTitle: book?.title ?? ''
-  })
+    novelTitle: book?.title ?? '',
+    hotkeyNextPage: s.hotkeyNextPage,
+    hotkeyPrevPage: s.hotkeyPrevPage,
+    hotkeyToggleHidden: s.hotkeyToggleHidden,
+    hotkeyCopy: formatShortcutCopy(s)
+  }
+}
+
+async function pushSettingsToWindow(): Promise<void> {
+  if (!win || win.isDestroyed()) return
+  win.webContents.send('settings:data', settingsPayload())
 }
 
 let ipcWired = false
@@ -122,17 +130,5 @@ export function wireSettingsIpc(): void {
     win?.close()
   })
 
-  ipcMain.handle('settings:get', () => {
-    const s = getSettings()
-    const state = getState()
-    const book = state && state.bookId > 0 ? getBook(state.bookId) : null
-    return {
-      charsPerPage: s.charsPerPage,
-      preferredEncoding: s.preferredEncoding,
-      moyuText: s.moyuText,
-      showPageNumber: s.showPageNumber,
-      novelPath: book?.filePath ?? '',
-      novelTitle: book?.title ?? ''
-    }
-  })
+  ipcMain.handle('settings:get', () => settingsPayload())
 }

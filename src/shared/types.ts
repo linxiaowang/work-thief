@@ -56,12 +56,13 @@ export interface AppSettings {
   preferredEncoding: PreferredEncoding
 }
 
+/** Thief-style defaults. Chapter jump stays in the tray menu only. */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  hotkeyNextPage: 'Alt+Cmd+Right',
-  hotkeyPrevPage: 'Alt+Cmd+Left',
-  hotkeyNextChapter: 'Alt+Cmd+Down',
-  hotkeyPrevChapter: 'Alt+Cmd+Up',
-  hotkeyToggleHidden: 'Ctrl+Alt+Cmd+M',
+  hotkeyNextPage: 'CommandOrControl+Alt+.',
+  hotkeyPrevPage: 'CommandOrControl+Alt+,',
+  hotkeyNextChapter: '',
+  hotkeyPrevChapter: '',
+  hotkeyToggleHidden: 'CommandOrControl+Alt+M',
   watchedFolder: null,
   charsPerPage: 40,
   moyuText: 'Hello',
@@ -69,7 +70,17 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   preferredEncoding: 'auto'
 }
 
+/** Old defaults that should auto-migrate to the Thief-style set. */
+export const LEGACY_HOTKEY_DEFAULTS = {
+  hotkeyNextPage: 'Alt+Cmd+Right',
+  hotkeyPrevPage: 'Alt+Cmd+Left',
+  hotkeyNextChapter: 'Alt+Cmd+Down',
+  hotkeyPrevChapter: 'Alt+Cmd+Up',
+  hotkeyToggleHidden: 'Ctrl+Alt+Cmd+M'
+} as const
+
 export interface ImportResult {
   imported: number
   failed: Array<{ path: string; reason: string }>
 }
+

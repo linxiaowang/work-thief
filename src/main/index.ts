@@ -12,7 +12,9 @@ import {
   getTray,
   nextPage,
   prevPage,
-  setChooseNovelHandler
+  setChooseNovelHandler,
+  setRightClickHandler,
+  syncChapterIndexForMenu
 } from './menuBar'
 import { buildContextMenu } from './menuBuilder'
 import { chooseNovel } from './chooseNovel'
@@ -21,8 +23,8 @@ import { openSettingsWindow, wireSettingsIpc, setSettingsSavedHandler } from './
 /**
  * WorkThief — menu-bar novel reader.
  *
- * Novel text via Tray.setTitle(). Tray menu + hotkeys for nav / Boss Key.
- * First-run: choose TXT via file picker (watcher folder is bonus).
+ * Novel text via Tray.setTitle(). Left-click pages; right-click menu.
+ * Hotkeys: CommandOrControl+Alt+./, and Boss M. First-run: choose TXT.
  */
 
 const gotLock = app.requestSingleInstanceLock()
@@ -52,6 +54,9 @@ app.on('second-instance', () => {
   refreshContextMenu()
 })
 
+/** Kept for popUpContextMenu — never tray.setContextMenu (steals left-click). */
+let trayMenu: Menu | null = null
+
 app.whenReady().then(async () => {
   wireSettingsIpc()
   setSettingsSavedHandler(() => refreshContextMenu())
@@ -61,6 +66,12 @@ app.whenReady().then(async () => {
 
   // Tray first so a native crash / throw in db or watcher still leaves a menu-bar item.
   initTray()
+  setRightClickHandler(() => {
+    const tray = getTray()
+    if (!tray) return
+    refreshContextMenu()
+    if (trayMenu) tray.popUpContextMenu(trayMenu)
+  })
   refreshContextMenu()
   notifyStarted()
 
@@ -103,8 +114,8 @@ function notifyStarted(): void {
     const n = new Notification({
       title: 'WorkThief 已在菜单栏',
       body: app.isPackaged
-        ? '托盘已启动。无书时点菜单「选择小说…」或点标题选 TXT。'
-        : '开发模式：Dock 可见；菜单栏应有标题。无书 →「选择小说…」。'
+        ? '托盘已启动。左键翻页；右键菜单。无书时点标题选 TXT。'
+        : '开发模式：Dock 可见；左键翻页；右键菜单。无书 → 点标题选 TXT。'
     })
     n.show()
     console.log('[WorkThief] startup Notification shown')
@@ -124,16 +135,19 @@ async function pickInitialBook(): Promise<void> {
 }
 
 function refreshContextMenu(): void {
+  syncChapterIndexForMenu()
   const menu = buildContextMenu({
     onOpenSettings: () => openSettingsWindow(),
     onChooseNovel: () => {
       void chooseNovel().then(refreshContextMenu)
     },
     onPrevPage: () => {
-      void prevPage().then(refreshContextMenu)
+      prevPage()
+      refreshContextMenu()
     },
     onNextPage: () => {
-      void nextPage().then(refreshContextMenu)
+      nextPage()
+      refreshContextMenu()
     },
     onSwitchBook: (id) => {
       void switchToBook(id).then(refreshContextMenu)
@@ -147,7 +161,7 @@ function refreshContextMenu(): void {
     },
     onQuit: () => app.quit()
   })
+  trayMenu = menu
   Menu.setApplicationMenu(menu)
-  const tray = getTray()
-  if (tray) tray.setContextMenu(menu)
+  // Intentionally NOT tray.setContextMenu(menu) — left click must page like Thief.
 }

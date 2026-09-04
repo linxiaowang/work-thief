@@ -23,8 +23,8 @@
 ```
 Electron Main only
 ├── Tray (+ setTitle 出正文)
-├── Context menu（书架 / 章节 / Boss Key / 字数 / 文件夹 / 退出）
-├── globalShortcut（翻页 / 翻章 / Boss Key）
+├── Right-click menu（书架 / 章节 / Boss Key / 设置 / 退出）；左键翻页
+├── globalShortcut（翻页 / Boss Key；章节仅菜单）
 ├── chokidar watcher → importPaths
 ├── SQLite (better-sqlite3)
 │   books / chapters / progress / settings
@@ -37,7 +37,7 @@ Electron Main only
 
 | 文件 | 职责 |
 |---|---|
-| index.ts | 单实例、隐藏 Dock、启动顺序、挂右键菜单 |
+| index.ts | 单实例、隐藏 Dock、启动顺序、右键 popUpContextMenu |
 | menuBar.ts | Tray、阅读状态、分页缓存、进度持久化、Boss Key |
 | menuBuilder.ts | 右键菜单模板 |
 | pagination.ts | 按 charsPerPage 切页，优先句号/段落 |
@@ -86,17 +86,21 @@ AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber 
 
 ---
 
-## 6. 热键默认
+## 6. 热键默认（Thief-style）
 
 | Accelerator | 动作 |
 |---|---|
-| Alt+Cmd+Right | 下一页 |
-| Alt+Cmd+Left | 上一页 |
-| Alt+Cmd+Down | 下一章 |
-| Alt+Cmd+Up | 上一章 |
-| Ctrl+Alt+Cmd+M | Boss Key |
+| CommandOrControl+Alt+. | 下一页 |
+| CommandOrControl+Alt+, | 上一页 |
+| CommandOrControl+Alt+M | Boss Key |
 
-macOS 需辅助功能权限，否则 globalShortcut.register 静默失败。
+章节跳转仅右键菜单（默认不注册翻章热键）。
+
+macOS 需辅助功能权限；注册失败时 Notification + 托盘标题提示「开 系统设置→隐私→辅助功能」。
+
+托盘：左键翻页 / 无书选文件；右键 popUpContextMenu。禁止 setContextMenu（会抢走左键）。
+
+翻页热路径：pages 常驻内存；next/prev 只改 pageIndex + setTitle；persistProgress 防抖 800ms；末页停止不回绕，标题可带「·完」。
 
 ---
 

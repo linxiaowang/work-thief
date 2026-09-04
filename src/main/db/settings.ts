@@ -1,6 +1,7 @@
 import { getDb } from './client'
 import {
   DEFAULT_APP_SETTINGS,
+  LEGACY_HOTKEY_DEFAULTS,
   type AppSettings,
   type PreferredEncoding
 } from '@shared/types'
@@ -61,14 +62,42 @@ export function resetSettings(): AppSettings {
   return fresh
 }
 
+function migrateHotkey(
+  stored: string | undefined,
+  nextDefault: string,
+  legacyDefault: string
+): string {
+  if (stored == null || stored === '' || stored === legacyDefault) return nextDefault
+  return stored
+}
+
 function mergeWithDefaults(parsed: Partial<AppSettings>): AppSettings {
   const d = defaultSettings()
   return {
-    hotkeyNextPage: parsed.hotkeyNextPage ?? d.hotkeyNextPage,
-    hotkeyPrevPage: parsed.hotkeyPrevPage ?? d.hotkeyPrevPage,
-    hotkeyNextChapter: parsed.hotkeyNextChapter ?? d.hotkeyNextChapter,
-    hotkeyPrevChapter: parsed.hotkeyPrevChapter ?? d.hotkeyPrevChapter,
-    hotkeyToggleHidden: parsed.hotkeyToggleHidden ?? d.hotkeyToggleHidden,
+    hotkeyNextPage: migrateHotkey(
+      parsed.hotkeyNextPage,
+      d.hotkeyNextPage,
+      LEGACY_HOTKEY_DEFAULTS.hotkeyNextPage
+    ),
+    hotkeyPrevPage: migrateHotkey(
+      parsed.hotkeyPrevPage,
+      d.hotkeyPrevPage,
+      LEGACY_HOTKEY_DEFAULTS.hotkeyPrevPage
+    ),
+    // Chapter hotkeys are menu-only; empty / legacy → stay empty.
+    hotkeyNextChapter:
+      parsed.hotkeyNextChapter === LEGACY_HOTKEY_DEFAULTS.hotkeyNextChapter
+        ? ''
+        : (parsed.hotkeyNextChapter ?? d.hotkeyNextChapter),
+    hotkeyPrevChapter:
+      parsed.hotkeyPrevChapter === LEGACY_HOTKEY_DEFAULTS.hotkeyPrevChapter
+        ? ''
+        : (parsed.hotkeyPrevChapter ?? d.hotkeyPrevChapter),
+    hotkeyToggleHidden: migrateHotkey(
+      parsed.hotkeyToggleHidden,
+      d.hotkeyToggleHidden,
+      LEGACY_HOTKEY_DEFAULTS.hotkeyToggleHidden
+    ),
     watchedFolder: parsed.watchedFolder ?? d.watchedFolder,
     charsPerPage: clampChars(parsed.charsPerPage ?? d.charsPerPage),
     moyuText: parsed.moyuText ?? d.moyuText,

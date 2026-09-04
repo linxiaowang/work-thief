@@ -1,51 +1,40 @@
-import { globalShortcut } from 'electron'
+import { globalShortcut, Notification } from 'electron'
 import { getSettings } from './db/settings'
-import {
-  nextPage,
-  prevPage,
-  nextChapter,
-  prevChapter,
-  toggleHidden
-} from './menuBar'
+import { nextPage, prevPage, toggleHidden, getTray } from './menuBar'
 
 /**
- * Global hotkeys for the menu-bar reader.
+ * Global hotkeys for the menu-bar reader (Thief-style defaults).
  *
- * Defaults avoid conflicts with Spotlight, Raycast, Alfred, and common
- * text-editor shortcuts. Users can override in settings.
+ * Page + Boss only — chapter jump stays in the tray menu.
  */
 
 const DEFAULT_HOTKEYS = {
-  nextPage: 'Alt+Cmd+Right',
-  prevPage: 'Alt+Cmd+Left',
-  nextChapter: 'Alt+Cmd+Down',
-  prevChapter: 'Alt+Cmd+Up',
-  toggleHidden: 'Ctrl+Alt+Cmd+M'
+  nextPage: 'CommandOrControl+Alt+.',
+  prevPage: 'CommandOrControl+Alt+,',
+  toggleHidden: 'CommandOrControl+Alt+M'
 } as const
 
+const ACCESSIBILITY_HINT = '开 系统设置→隐私→辅助功能'
+
 interface HotkeyCallbacks {
-  nextPage: () => void | Promise<void>
-  prevPage: () => void | Promise<void>
-  nextChapter: () => void | Promise<void>
-  prevChapter: () => void | Promise<void>
+  nextPage: () => void
+  prevPage: () => void
   toggleHidden: () => void
 }
 
 let lastRegistered: Record<string, string> = {}
 
 /**
- * Register all global shortcuts based on settings. Safe to call
+ * Register page + Boss global shortcuts based on settings. Safe to call
  * repeatedly — unregisters prior bindings first.
+ * Does NOT register chapter hotkeys (menu-only).
  */
 export function applyShortcuts(): { ok: boolean; failures: string[] } {
   const failures: string[] = []
   const settings = getSettings()
-  // Use settings overrides when present, otherwise defaults.
   const keys = {
     nextPage: settings.hotkeyNextPage || DEFAULT_HOTKEYS.nextPage,
     prevPage: settings.hotkeyPrevPage || DEFAULT_HOTKEYS.prevPage,
-    nextChapter: settings.hotkeyNextChapter || DEFAULT_HOTKEYS.nextChapter,
-    prevChapter: settings.hotkeyPrevChapter || DEFAULT_HOTKEYS.prevChapter,
     toggleHidden: settings.hotkeyToggleHidden || DEFAULT_HOTKEYS.toggleHidden
   }
 
@@ -53,14 +42,13 @@ export function applyShortcuts(): { ok: boolean; failures: string[] } {
   lastRegistered = {}
 
   const cbs: HotkeyCallbacks = {
-    nextPage: () => void nextPage(),
-    prevPage: () => void prevPage(),
-    nextChapter: () => void nextChapter(),
-    prevChapter: () => void prevChapter(),
+    nextPage: () => nextPage(),
+    prevPage: () => prevPage(),
     toggleHidden: () => toggleHidden()
   }
 
   const tryRegister = (accelerator: string, name: keyof HotkeyCallbacks) => {
+    if (!accelerator.trim()) return
     try {
       const ok = globalShortcut.register(accelerator, cbs[name])
       if (!ok) failures.push(`${name}: ${accelerator}`)
@@ -72,11 +60,33 @@ export function applyShortcuts(): { ok: boolean; failures: string[] } {
 
   tryRegister(keys.nextPage, 'nextPage')
   tryRegister(keys.prevPage, 'prevPage')
-  tryRegister(keys.nextChapter, 'nextChapter')
-  tryRegister(keys.prevChapter, 'prevChapter')
   tryRegister(keys.toggleHidden, 'toggleHidden')
 
-  return { ok: failures.length === 0, failures }
+  const ok = failures.length === 0
+  if (!ok) {
+    notifyShortcutFailure(failures)
+  }
+  return { ok, failures }
+}
+
+function notifyShortcutFailure(failures: string[]): void {
+  const tray = getTray()
+  if (tray) {
+    tray.setTitle(ACCESSIBILITY_HINT)
+  }
+  if (!Notification.isSupported()) {
+    console.warn('[WorkThief] shortcut register failed:', failures.join('; '))
+    return
+  }
+  try {
+    const n = new Notification({
+      title: 'WorkThief 热键注册失败',
+      body: `请打开「系统设置 → 隐私与安全性 → 辅助功能」允许本应用，然后重启。\n${failures.join('\n')}`
+    })
+    n.show()
+  } catch (err) {
+    console.error('[WorkThief] shortcut failure Notification failed:', err)
+  }
 }
 
 export function unregisterAllShortcuts(): void {
@@ -84,4 +94,31 @@ export function unregisterAllShortcuts(): void {
   lastRegistered = {}
 }
 
-export const _internals = { DEFAULT_HOTKEYS }
+export function getRegisteredShortcuts(): Record<string, string> {
+  return { ...lastRegistered }
+}
+
+/** Human-readable copy of current page/Boss shortcuts for Settings UI. */
+export function formatShortcutCopy(settings?: {
+  hotkeyNextPage: string
+  hotkeyPrevPage: string
+  hotkeyToggleHidden: string
+}): string {
+  const s = settings ?? getSettings()
+  const next = s.hotkeyNextPage || DEFAULT_HOTKEYS.nextPage
+  const prev = s.hotkeyPrevPage || DEFAULT_HOTKEYS.prevPage
+  const boss = s.hotkeyToggleHidden || DEFAULT_HOTKEYS.toggleHidden
+  return `下一页 ${friendlyAccel(next)}　上一页 ${friendlyAccel(prev)}　Boss ${friendlyAccel(boss)}`
+}
+
+function friendlyAccel(accel: string): string {
+  return accel
+    .replace(/CommandOrControl/gi, process.platform === 'darwin' ? '⌘' : 'Ctrl')
+    .replace(/Command/gi, '⌘')
+    .replace(/Control|Ctrl/gi, '⌃')
+    .replace(/Option|Alt/gi, '⌥')
+    .replace(/Shift/gi, '⇧')
+    .replace(/\+/g, '')
+}
+
+export const _internals = { DEFAULT_HOTKEYS, ACCESSIBILITY_HINT }
