@@ -11,3 +11,5 @@ release/
 *.tsbuildinfo
 .vitest-cache/
 .pnpm-store
+.tmp-userdata/
+.test-userdata/

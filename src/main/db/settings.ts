@@ -3,6 +3,9 @@ import { DEFAULT_APP_SETTINGS, type AppSettings } from '@shared/types'
 
 const SETTINGS_KEY = 'app_settings'
 
+const MIN_CHARS = 20
+const MAX_CHARS = 80
+
 function defaultSettings(): AppSettings {
   return { ...DEFAULT_APP_SETTINGS, watchedFolder: null }
 }
@@ -24,6 +27,9 @@ export function getSettings(): AppSettings {
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   const current = getSettings()
   const merged: AppSettings = { ...current, ...patch }
+  if (typeof patch.charsPerPage === 'number') {
+    merged.charsPerPage = clampChars(patch.charsPerPage)
+  }
   const d = getDb()
   d.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?)
@@ -50,6 +56,12 @@ function mergeWithDefaults(parsed: Partial<AppSettings>): AppSettings {
     hotkeyNextChapter: parsed.hotkeyNextChapter ?? d.hotkeyNextChapter,
     hotkeyPrevChapter: parsed.hotkeyPrevChapter ?? d.hotkeyPrevChapter,
     hotkeyToggleHidden: parsed.hotkeyToggleHidden ?? d.hotkeyToggleHidden,
-    watchedFolder: parsed.watchedFolder ?? d.watchedFolder
+    watchedFolder: parsed.watchedFolder ?? d.watchedFolder,
+    charsPerPage: clampChars(parsed.charsPerPage ?? d.charsPerPage)
   }
+}
+
+function clampChars(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULT_APP_SETTINGS.charsPerPage
+  return Math.max(MIN_CHARS, Math.min(MAX_CHARS, Math.round(n)))
 }

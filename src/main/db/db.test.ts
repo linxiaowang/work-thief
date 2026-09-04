@@ -299,27 +299,30 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
 
   it('returns defaults when no settings exist', () => {
     const s = getSettings()
-    expect(s.bossShowHotkey).toBe('Alt+Space')
-    expect(s.reader.themeId).toBe('sepia')
+    expect(s.hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
+    expect(s.charsPerPage).toBe(40)
+    expect(s.watchedFolder).toBeNull()
   })
 
   it('updates and persists settings', () => {
-    updateSettings({ reader: { fontSize: 24 } })
+    updateSettings({ charsPerPage: 50, hotkeyNextPage: 'Alt+Cmd+]' })
     const s = getSettings()
-    expect(s.reader.fontSize).toBe(24)
-    expect(s.bossShowHotkey).toBe('Alt+Space')
+    expect(s.charsPerPage).toBe(50)
+    expect(s.hotkeyNextPage).toBe('Alt+Cmd+]')
+    expect(s.hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
   })
 
-  it('clamps reader settings to valid ranges', () => {
-    updateSettings({ reader: { fontSize: 999, windowOpacity: 0.1 } })
-    const s = getSettings()
-    expect(s.reader.fontSize).toBe(32)
-    expect(s.reader.windowOpacity).toBe(0.5)
+  it('clamps charsPerPage to valid ranges', () => {
+    updateSettings({ charsPerPage: 999 })
+    expect(getSettings().charsPerPage).toBe(80)
+    updateSettings({ charsPerPage: 5 })
+    expect(getSettings().charsPerPage).toBe(20)
   })
 
   it('resets to defaults', () => {
-    updateSettings({ bossShowHotkey: 'X' })
+    updateSettings({ charsPerPage: 60, hotkeyToggleHidden: 'X' })
     resetSettings()
-    expect(getSettings().bossShowHotkey).toBe('Alt+Space')
+    expect(getSettings().charsPerPage).toBe(40)
+    expect(getSettings().hotkeyToggleHidden).toBe('Ctrl+Alt+Cmd+M')
   })
 })

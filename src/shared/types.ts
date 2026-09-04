@@ -1,8 +1,8 @@
 /**
  * Shared types for the menu-bar novel reader.
  *
- * This app is now menu-bar-only — no windows, no renderer. Types below
- * describe persisted state and DB rows.
+ * Menu-bar only — no Dock, no reading window, no Popover. Body text
+ * is rendered via Tray.setTitle(); navigation is a right-click menu.
  */
 
 export interface Book {
@@ -31,6 +31,7 @@ export interface Chapter {
 export interface Progress {
   bookId: number
   chapterIndex: number
+  /** 0..1 fraction through the current chapter (used to restore page). */
   chapterProgress: number
   lastReadAt: number
 }
@@ -42,6 +43,8 @@ export interface AppSettings {
   hotkeyPrevChapter: string
   hotkeyToggleHidden: string
   watchedFolder: string | null
+  /** Characters shown per menu-bar "page". */
+  charsPerPage: number
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -50,5 +53,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkeyNextChapter: 'Alt+Cmd+Down',
   hotkeyPrevChapter: 'Alt+Cmd+Up',
   hotkeyToggleHidden: 'Ctrl+Alt+Cmd+M',
-  watchedFolder: null
+  watchedFolder: null,
+  charsPerPage: 40
+}
+
+export interface ImportResult {
+  imported: number
+  failed: Array<{ path: string; reason: string }>
 }

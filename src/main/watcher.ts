@@ -2,7 +2,6 @@ import chokidar, { FSWatcher } from 'chokidar'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { app } from 'electron'
 import { getSettings, updateSettings } from './db/settings'
 import { importPaths } from './ipc'
 

@@ -76,3 +76,16 @@ function migrate(d: Database.Database): void {
     );
   `)
 }
+
+/** Test seam: swap the singleton DB (e.g. :memory:). */
+export function _setDbForTesting(customDb: Database.Database | null): void {
+  if (db) {
+    try {
+      db.close()
+    } catch {
+      /* ignore */
+    }
+  }
+  db = customDb
+}
+

@@ -1,57 +1,40 @@
 /**
- * Pagination — split long chapter text into "pages" that fit in the
- * macOS menu bar.
+ * Pagination — split chapter text into menu-bar-sized pages.
  *
- * macOS menu bar height is ~22pt; at 13pt font that fits about 30-50
- * Chinese characters per line, depending on punctuation width. We aim
- * for ~50 chars per page, but prefer to break on sentence boundaries
- * (。！？) or paragraph breaks (\n\n) so we never split a sentence
- * mid-character.
+ * Default ~40 chars; prefer sentence / paragraph breaks.
  */
 
-const MAX_CHARS_PER_PAGE = 50
+const DEFAULT_CHARS_PER_PAGE = 40
 
-/**
- * Split a chunk of text into roughly-equal pages, preferring to break
- * at sentence or paragraph boundaries.
- */
-export function paginate(text: string, maxChars: number = MAX_CHARS_PER_PAGE): string[] {
-  // Normalize whitespace: collapse runs of \n into paragraph breaks.
+export function paginate(text: string, maxChars: number = DEFAULT_CHARS_PER_PAGE): string[] {
+  const limit = Math.max(10, maxChars)
   const normalized = text
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 
   if (!normalized) return []
-  if (normalized.length <= maxChars) return [normalized]
+  if (normalized.length <= limit) return [normalized]
 
   const pages: string[] = []
   let cursor = 0
 
   while (cursor < normalized.length) {
     const remaining = normalized.slice(cursor)
-    if (remaining.length <= maxChars) {
+    if (remaining.length <= limit) {
       pages.push(remaining)
       break
     }
 
-    // Look for the best break point within the page window.
-    const window = remaining.slice(0, maxChars)
-
-    // 1. Try paragraph break (\n\n) — preferred.
+    const window = remaining.slice(0, limit)
     let breakAt = window.lastIndexOf('\n\n')
-    // 2. Try sentence-ending punctuation (Chinese or English).
     if (breakAt < 0) breakAt = findLastSentenceEnd(window)
-    // 3. Try single newline.
     if (breakAt < 0) breakAt = window.lastIndexOf('\n')
-    // 4. Try any whitespace.
     if (breakAt < 0) breakAt = findLastWhitespace(window)
-    // 5. Hard cut at maxChars.
-    if (breakAt <= 0) breakAt = maxChars
+    if (breakAt <= 0) breakAt = limit
 
     const page = normalized.slice(cursor, cursor + breakAt).trim()
     if (page) pages.push(page)
-    // Skip the break chars themselves.
     cursor += breakAt
     while (normalized[cursor] === '\n' || normalized[cursor] === ' ') cursor++
   }
@@ -60,7 +43,6 @@ export function paginate(text: string, maxChars: number = MAX_CHARS_PER_PAGE): s
 }
 
 function findLastSentenceEnd(window: string): number {
-  // Look for the last occurrence of 。 ！ ？ .  !  ?
   let best = -1
   for (const ch of ['。', '！', '？', '. ', '! ', '? ']) {
     const idx = window.lastIndexOf(ch)
@@ -76,11 +58,7 @@ function findLastWhitespace(window: string): number {
   return -1
 }
 
-/**
- * Build a short preview string for the menu bar given a list of page
- * candidates. Picks the page starting near `approxStart` (character
- * offset within the chapter).
- */
+/** Pick the page whose start is nearest to approxOffset (char offset in chapter). */
 export function selectPageForOffset(
   pages: string[],
   approxOffset: number
@@ -88,7 +66,13 @@ export function selectPageForOffset(
   if (pages.length === 0) return { pageIndex: 0, page: '' }
   if (pages.length === 1) return { pageIndex: 0, page: pages[0] }
 
-  // Approximate: each page is ~maxChars long, so divide.
-  const idx = Math.min(pages.length - 1, Math.floor(approxOffset / MAX_CHARS_PER_PAGE))
-  return { pageIndex: idx, page: pages[idx] }
+  let cursor = 0
+  for (let i = 0; i < pages.length; i++) {
+    const next = cursor + pages[i].length
+    if (approxOffset < next || i === pages.length - 1) {
+      return { pageIndex: i, page: pages[i] }
+    }
+    cursor = next
+  }
+  return { pageIndex: pages.length - 1, page: pages[pages.length - 1] }
 }

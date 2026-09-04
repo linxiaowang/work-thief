@@ -42,11 +42,11 @@ export function applyShortcuts(): { ok: boolean; failures: string[] } {
   const settings = getSettings()
   // Use settings overrides when present, otherwise defaults.
   const keys = {
-    nextPage: (settings as any).hotkeyNextPage ?? DEFAULT_HOTKEYS.nextPage,
-    prevPage: (settings as any).hotkeyPrevPage ?? DEFAULT_HOTKEYS.prevPage,
-    nextChapter: (settings as any).hotkeyNextChapter ?? DEFAULT_HOTKEYS.nextChapter,
-    prevChapter: (settings as any).hotkeyPrevChapter ?? DEFAULT_HOTKEYS.prevChapter,
-    toggleHidden: (settings as any).hotkeyToggleHidden ?? DEFAULT_HOTKEYS.toggleHidden
+    nextPage: settings.hotkeyNextPage || DEFAULT_HOTKEYS.nextPage,
+    prevPage: settings.hotkeyPrevPage || DEFAULT_HOTKEYS.prevPage,
+    nextChapter: settings.hotkeyNextChapter || DEFAULT_HOTKEYS.nextChapter,
+    prevChapter: settings.hotkeyPrevChapter || DEFAULT_HOTKEYS.prevChapter,
+    toggleHidden: settings.hotkeyToggleHidden || DEFAULT_HOTKEYS.toggleHidden
   }
 
   globalShortcut.unregisterAll()

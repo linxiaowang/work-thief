@@ -1,4 +1,3 @@
-import type Database from 'better-sqlite3'
 import { getDb } from './client'
 import type { Book } from '@shared/types'
 
@@ -109,11 +108,4 @@ export function markBookMissing(id: number, missing: boolean): void {
   d.prepare('UPDATE books SET missing = ? WHERE id = ?').run(missing ? 1 : 0, id)
 }
 
-/** Test seam: inject a custom DB instance. */
-export function _setDbForTesting(customDb: Database.Database): void {
-  // Force-close any existing connection.
-  // @ts-expect-error — accessing private module state via test hook
-  if (db) db.close()
-  // @ts-expect-error
-  db = customDb
-}
+export { _setDbForTesting } from './client'

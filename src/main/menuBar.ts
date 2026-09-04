@@ -3,14 +3,14 @@ import { join } from 'node:path'
 import { getBook } from './db/books'
 import { listChapters, getChapter } from './db/chapters'
 import { getProgress, upsertProgress } from './db/progress'
-import { paginate } from './pagination'
+import { getSettings } from './db/settings'
+import { paginate, selectPageForOffset } from './pagination'
 
 /**
  * MenuBar — owns the macOS menu bar item and all reading state.
  *
- * The tray icon stays put at all times. The title text shows the
- * current page of the current chapter. The Boss Key hides the title
- * but leaves the icon visible.
+ * The tray icon stays put. Title text shows the current page.
+ * Boss Key clears the title but leaves the icon.
  */
 
 export interface MenuBarState {
@@ -20,11 +20,13 @@ export interface MenuBarState {
   hidden: boolean
 }
 
+const EMPTY_HINT = '放 txt → Documents/WorkThief'
+
 let tray: Tray | null = null
 let state: MenuBarState | null = null
 let cachedPages: string[] = []
 let cachedChapterText: string | null = null
-let cachedChapterId: number | null = null
+let cachedChapterKey: string | null = null
 
 export function getTray(): Tray | null {
   return tray
@@ -34,9 +36,6 @@ export function getState(): MenuBarState | null {
   return state
 }
 
-/**
- * Initialize the tray icon. Called once at app startup.
- */
 export function initTray(): void {
   const templatePath = join(__dirname, '../../resources/iconTemplate.png')
   const fallbackPath = join(__dirname, '../../resources/icon.png')
@@ -49,58 +48,55 @@ export function initTray(): void {
     icon = nativeImage.createFromPath(fallbackPath)
   }
   tray = new Tray(icon)
-  tray.setToolTip('WorkThief — 菜单栏摸鱼阅读')
+  tray.setToolTip('WorkThief')
 }
 
-/**
- * Set or replace the current reading state and refresh the title text.
- * Resets the page cache for the chapter if chapterIndex changed.
- */
 export function setState(newState: MenuBarState): void {
   if (!tray) return
 
-  const chapterChanged = !state || state.bookId !== newState.bookId || state.chapterIndex !== newState.chapterIndex
+  const chapterChanged =
+    !state || state.bookId !== newState.bookId || state.chapterIndex !== newState.chapterIndex
   state = newState
   if (chapterChanged) {
     cachedChapterText = null
     cachedPages = []
+    cachedChapterKey = null
   }
   render()
   persistProgress()
 }
 
-/**
- * Refresh the menu bar text using the current state. Call after
- * changing pages, toggling hidden, or loading a chapter's pages.
- */
 export function render(): void {
   if (!tray || !state) return
   if (state.hidden) {
     tray.setTitle('')
     return
   }
+  if (state.bookId < 0) {
+    tray.setTitle(EMPTY_HINT)
+    return
+  }
 
-  const page = cachedPages[state.pageIndex] ?? '加载中…'
+  const page = cachedPages[state.pageIndex]
+  if (page == null) {
+    tray.setTitle('…')
+    return
+  }
   const chapter = getChapter(state.bookId, state.chapterIndex)
-  const chapterLabel = chapter ? ` ${state.chapterIndex + 1}. ` : ' '
-  const truncated = truncateForMenuBar(chapterLabel + page)
-  tray.setTitle(truncated)
+  const chapterLabel = chapter ? `${state.chapterIndex + 1}. ` : ''
+  tray.setTitle(truncateForMenuBar(chapterLabel + page))
 }
 
-/**
- * Load all pages for the current chapter. Lazy: only reads/decodes the
- * file the first time we visit a chapter.
- */
 export async function loadCurrentChapterPages(): Promise<void> {
-  if (!state) return
-  if (cachedChapterId === state.chapterIndex) return
+  if (!state || state.bookId < 0) return
+  const key = `${state.bookId}:${state.chapterIndex}`
+  if (cachedChapterKey === key && cachedPages.length > 0) return
 
   const book = getBook(state.bookId)
   if (!book) return
   const chapter = getChapter(state.bookId, state.chapterIndex)
   if (!chapter) return
 
-  // Read the chapter text from disk (cached by chapter id+bookId)
   const { readFile } = await import('node:fs/promises')
   const buf = await readFile(book.filePath)
   const { decodeBuffer } = await import('./parsers/encoding')
@@ -109,38 +105,46 @@ export async function loadCurrentChapterPages(): Promise<void> {
   const nextCh = allChapters.find((c) => c.index === state!.chapterIndex + 1)
   const slice = text.slice(chapter.startOffset, nextCh ? nextCh.startOffset : text.length)
   cachedChapterText = slice
-  cachedPages = paginate(slice)
-  cachedChapterId = state.chapterIndex
+  const chars = getSettings().charsPerPage
+  cachedPages = paginate(slice, chars)
+  cachedChapterKey = key
 
-  // Clamp pageIndex in case we jumped to a shorter chapter.
   if (state.pageIndex >= cachedPages.length) {
     state.pageIndex = Math.max(0, cachedPages.length - 1)
   }
   render()
 }
 
-/**
- * Advance to the next page; rolls into next chapter if needed; rolls
- * into next book if needed.
- */
+/** Re-split pages after charsPerPage changes; keep approximate position. */
+export async function reloadPagination(): Promise<void> {
+  if (!state || !cachedChapterText) return
+  let charsBefore = 0
+  for (let i = 0; i < state.pageIndex && i < cachedPages.length; i++) {
+    charsBefore += cachedPages[i].length
+  }
+  cachedPages = paginate(cachedChapterText, getSettings().charsPerPage)
+  const selected = selectPageForOffset(cachedPages, charsBefore)
+  state.pageIndex = selected.pageIndex
+  render()
+  persistProgress()
+}
+
 export async function nextPage(): Promise<void> {
-  if (!state) return
+  if (!state || state.bookId < 0) return
   await loadCurrentChapterPages()
   if (state.pageIndex < cachedPages.length - 1) {
     state.pageIndex++
   } else {
-    // Last page of current chapter → next chapter.
     const totalChapters = listChapters(state.bookId).length
     if (state.chapterIndex < totalChapters - 1) {
       state.chapterIndex++
       state.pageIndex = 0
-      cachedChapterId = null
+      cachedChapterKey = null
       await loadCurrentChapterPages()
     } else {
-      // Last chapter, last page — wrap to first page of first chapter.
       state.chapterIndex = 0
       state.pageIndex = 0
-      cachedChapterId = null
+      cachedChapterKey = null
       await loadCurrentChapterPages()
     }
   }
@@ -149,37 +153,33 @@ export async function nextPage(): Promise<void> {
 }
 
 export async function prevPage(): Promise<void> {
-  if (!state) return
+  if (!state || state.bookId < 0) return
   await loadCurrentChapterPages()
   if (state.pageIndex > 0) {
     state.pageIndex--
+  } else if (state.chapterIndex > 0) {
+    state.chapterIndex--
+    cachedChapterKey = null
+    await loadCurrentChapterPages()
+    state.pageIndex = Math.max(0, cachedPages.length - 1)
   } else {
-    // First page → previous chapter's last page.
-    if (state.chapterIndex > 0) {
-      state.chapterIndex--
-      cachedChapterId = null
-      await loadCurrentChapterPages()
-      state.pageIndex = Math.max(0, cachedPages.length - 1)
-    } else {
-      // Wrap to last page of last chapter.
-      const totalChapters = listChapters(state.bookId).length
-      state.chapterIndex = Math.max(0, totalChapters - 1)
-      cachedChapterId = null
-      await loadCurrentChapterPages()
-      state.pageIndex = Math.max(0, cachedPages.length - 1)
-    }
+    const totalChapters = listChapters(state.bookId).length
+    state.chapterIndex = Math.max(0, totalChapters - 1)
+    cachedChapterKey = null
+    await loadCurrentChapterPages()
+    state.pageIndex = Math.max(0, cachedPages.length - 1)
   }
   render()
   persistProgress()
 }
 
 export async function nextChapter(): Promise<void> {
-  if (!state) return
+  if (!state || state.bookId < 0) return
   const totalChapters = listChapters(state.bookId).length
   if (state.chapterIndex < totalChapters - 1) {
     state.chapterIndex++
     state.pageIndex = 0
-    cachedChapterId = null
+    cachedChapterKey = null
     await loadCurrentChapterPages()
     render()
     persistProgress()
@@ -187,11 +187,11 @@ export async function nextChapter(): Promise<void> {
 }
 
 export async function prevChapter(): Promise<void> {
-  if (!state) return
+  if (!state || state.bookId < 0) return
   if (state.chapterIndex > 0) {
     state.chapterIndex--
     state.pageIndex = 0
-    cachedChapterId = null
+    cachedChapterKey = null
     await loadCurrentChapterPages()
     render()
     persistProgress()
@@ -199,10 +199,10 @@ export async function prevChapter(): Promise<void> {
 }
 
 export async function jumpToChapter(chapterIndex: number, pageIndex: number = 0): Promise<void> {
-  if (!state) return
+  if (!state || state.bookId < 0) return
   state.chapterIndex = chapterIndex
   state.pageIndex = pageIndex
-  cachedChapterId = null
+  cachedChapterKey = null
   await loadCurrentChapterPages()
   render()
   persistProgress()
@@ -221,7 +221,7 @@ export function toggleHidden(): void {
 }
 
 /**
- * Switch to a different book, restoring its last-read position.
+ * Switch book and restore last chapter + approximate page.
  */
 export async function switchToBook(bookId: number): Promise<void> {
   const book = getBook(bookId)
@@ -230,12 +230,17 @@ export async function switchToBook(bookId: number): Promise<void> {
   state = {
     bookId,
     chapterIndex: progress?.chapterIndex ?? 0,
-    pageIndex: 0, // pageIndex isn't persisted — start at top of resumed chapter
+    pageIndex: 0,
     hidden: state?.hidden ?? false
   }
-  cachedChapterId = null
+  cachedChapterKey = null
   await loadCurrentChapterPages()
+  if (progress && cachedChapterText && cachedPages.length > 0) {
+    const approxOffset = Math.floor((progress.chapterProgress ?? 0) * cachedChapterText.length)
+    state.pageIndex = selectPageForOffset(cachedPages, approxOffset).pageIndex
+  }
   render()
+  persistProgress()
 }
 
 export function getCurrentPages(): string[] {
@@ -243,15 +248,19 @@ export function getCurrentPages(): string[] {
 }
 
 function persistProgress(): void {
-  if (!state) return
-  // Persist as character progress within the chapter (best we can do
-  // without a page → char offset mapping; rough approximation).
-  upsertProgress(state.bookId, state.chapterIndex, 0)
+  if (!state || state.bookId < 0) return
+  let fraction = 0
+  if (cachedChapterText && cachedChapterText.length > 0 && cachedPages.length > 0) {
+    let charsBefore = 0
+    for (let i = 0; i < state.pageIndex && i < cachedPages.length; i++) {
+      charsBefore += cachedPages[i].length
+    }
+    fraction = charsBefore / cachedChapterText.length
+  }
+  upsertProgress(state.bookId, state.chapterIndex, fraction)
 }
 
 function truncateForMenuBar(text: string): string {
-  // macOS truncates Tray.setTitle around 30-50 chars depending on other
-  // menu bar items. Be defensive: hard-cut at 80 chars.
   if (text.length <= 80) return text
   return text.slice(0, 77) + '…'
 }

@@ -1,7 +1,7 @@
 {
   "name": "work-thief",
   "version": "0.2.0",
-  "description": "Menu-bar novel reader for the slacking professional.",
+  "description": "macOS menu-bar sneak-reading app — TXT via Tray.setTitle.",
   "main": "out/main/index.js",
   "type": "module",
   "author": "Shawn Lin",
@@ -21,7 +21,8 @@
     "setup": "pnpm run setup:electron && pnpm run setup:native",
     "postinstall": "pnpm run setup || true",
     "pack": "electron-vite build && electron-builder --mac --dir",
-    "dist": "electron-vite build && electron-builder --mac"
+    "dist": "electron-vite build && electron-builder --mac",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
