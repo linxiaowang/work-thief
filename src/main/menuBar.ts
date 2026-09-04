@@ -1,4 +1,4 @@
-import { Tray, nativeImage } from 'electron'
+import { Tray, nativeImage, app } from 'electron'
 import { join } from 'node:path'
 import { getBook } from './db/books'
 import { listChapters, getChapter } from './db/chapters'
@@ -22,6 +22,10 @@ export interface MenuBarState {
 
 const EMPTY_HINT = '放 txt → Documents/WorkThief'
 
+/** Tiny 16×16 black PNG — last-resort embedded template for macOS menu bar. */
+const EMBEDDED_TEMPLATE_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFUlEQVQ4T2NkYGD4z0ABYBzVMKqBEQAAsgABqV9mVQAAAABJRU5ErkJggg=='
+
 let tray: Tray | null = null
 let state: MenuBarState | null = null
 let cachedPages: string[] = []
@@ -36,19 +40,43 @@ export function getState(): MenuBarState | null {
   return state
 }
 
-export function initTray(): void {
-  const templatePath = join(__dirname, '../../resources/iconTemplate.png')
-  const fallbackPath = join(__dirname, '../../resources/icon.png')
-  let icon: Electron.NativeImage
-  try {
-    icon = nativeImage.createFromPath(templatePath)
-    if (icon.isEmpty()) throw new Error('template empty')
-    icon.setTemplateImage(true)
-  } catch {
-    icon = nativeImage.createFromPath(fallbackPath)
+function resolveTrayIcon(): Electron.NativeImage {
+  const candidates = [
+    join(process.cwd(), 'resources/iconTemplate.png'),
+    join(process.cwd(), 'resources/icon.png'),
+    join(app.getAppPath(), 'resources/iconTemplate.png'),
+    join(app.getAppPath(), 'resources/icon.png'),
+    join(__dirname, '../../resources/iconTemplate.png'),
+    join(__dirname, '../../resources/icon.png')
+  ]
+
+  for (const path of candidates) {
+    const icon = nativeImage.createFromPath(path)
+    console.log(`[WorkThief] tray icon candidate: ${path} isEmpty=${icon.isEmpty()}`)
+    if (!icon.isEmpty()) {
+      if (path.includes('iconTemplate')) {
+        icon.setTemplateImage(true)
+      }
+      console.log(`[WorkThief] tray icon chosen: ${path} isEmpty=${icon.isEmpty()}`)
+      return icon
+    }
   }
+
+  // Never new Tray(empty). Prefer embedded template PNG for macOS menu bar.
+  const icon = nativeImage.createFromDataURL(EMBEDDED_TEMPLATE_PNG)
+  if (!icon.isEmpty()) {
+    icon.setTemplateImage(true)
+  }
+  console.log(`[WorkThief] tray icon chosen: <embedded-fallback> isEmpty=${icon.isEmpty()}`)
+  return icon
+}
+
+export function initTray(): void {
+  const icon = resolveTrayIcon()
   tray = new Tray(icon)
   tray.setToolTip('WorkThief')
+  // Title immediately so the item is findable even before books load / with empty shelf.
+  tray.setTitle(EMPTY_HINT)
 }
 
 export function setState(newState: MenuBarState): void {

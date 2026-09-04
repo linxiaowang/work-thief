@@ -36,13 +36,25 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(async () => {
-  getDb()
-  await ensureWatchedFolder()
-  await resumeWatching()
+  // Tray first so a native crash / throw in db or watcher still leaves a menu-bar item.
   initTray()
-  await pickInitialBook()
-  applyShortcuts()
-  refreshContextMenu()
+
+  try {
+    getDb()
+    await ensureWatchedFolder()
+    await resumeWatching()
+    await pickInitialBook()
+    applyShortcuts()
+    refreshContextMenu()
+  } catch (err) {
+    console.error('[WorkThief] startup after tray failed:', err)
+    // Tray already exists with empty-shelf hint; still wire a minimal quit menu.
+    try {
+      refreshContextMenu()
+    } catch (menuErr) {
+      console.error('[WorkThief] refreshContextMenu after startup error:', menuErr)
+    }
+  }
 
   app.on('activate', () => {
     refreshContextMenu()
