@@ -14,7 +14,7 @@
 | SQLite 本地库 + 进度 | Windows / Linux（暂） |
 | 全局热键 + Boss Key | |
 
-形态：无窗口 Menu Bar App（app.dock.hide()）。
+形态：无窗口 Menu Bar App（packaged: app.dock.hide(); dev: app.dock.show()）。
 
 ---
 
@@ -74,7 +74,7 @@ AppSettings：热键五键 + watchedFolder + charsPerPage（默认 40，钳制 2
 4. 热键 / 菜单翻页；跨章自动接上；末章末页绕回首章
 5. Boss Key：hidden=true → setTitle("")，图标保留
 
-空书架：标题显示短提示「放 txt → Documents/WorkThief」。
+空书架：标题显示短提示「WorkThief · 放 txt」。
 
 ---
 

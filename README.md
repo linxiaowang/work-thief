@@ -2,7 +2,9 @@
 
 > 上班摸鱼专用 · macOS 菜单栏 TXT 阅读器
 
-正文直接显示在菜单栏（Tray.setTitle）。无 Dock 图标、无阅读窗口、无 Popover。右键托盘：书架 / 章节 / Boss Key / 打开监听文件夹 / 退出。
+正文直接显示在菜单栏（Tray.setTitle）。无阅读窗口、无 Popover。右键托盘：书架 / 章节 / Boss Key / 打开监听文件夹 / 退出。
+
+正式打包版仍隐藏 Dock（纯菜单栏）；dev 模式（pnpm dev）临时显示 Dock。
 
 纯本地 TXT · SQLite 进度 · 文件夹监听 · 全局热键。不做 EPUB / 在线书源 / 账号。
 
@@ -26,9 +28,11 @@ pnpm install && pnpm setup && pnpm dev
 
 ## 托盘行为
 
+Menu-bar icon uses resources/icon.png and iconTemplate.png (teal book + W glyph).
+
 | 状态 | 菜单栏标题 |
 |---|---|
-| 书架空 | `放 txt → Documents/WorkThief` |
+| 书架空 | `WorkThief · 放 txt` |
 | 阅读中 | `章节号. 当前页正文`（约 80 字截断） |
 | Boss Key 开 | 标题清空，图标保留 |
 

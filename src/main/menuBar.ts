@@ -20,11 +20,15 @@ export interface MenuBarState {
   hidden: boolean
 }
 
-const EMPTY_HINT = '放 txt → Documents/WorkThief'
+/** Short empty-shelf hint — long Chinese+arrow strings get clipped / hard to spot. */
+const EMPTY_HINT = 'WorkThief · 放 txt'
 
-/** Tiny 16×16 black PNG — last-resort embedded template for macOS menu bar. */
-const EMBEDDED_TEMPLATE_PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFUlEQVQ4T2NkYGD4z0ABYBzVMKqBEQAAsgABqV9mVQAAAABJRU5ErkJggg=='
+/**
+ * 16×16 teal/orange book + white W — non-template color fallback.
+ * Must stay clearly opaque (not near-transparent / all-black template).
+ */
+const EMBEDDED_COLOR_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAtElEQVR4XmNgoAYQsbH5Tw6G2w3SfCdO7P/5VIX/OpOn/tedPO2/3uQpeNkgPVgN+A8E/EuX/hdYuvg/39IlWNkgNXgN0J0EdMEkoAsmAV2DhU3QAP7lQBcsB7pgOdAFWNgEDdCdCHTBRKALJk4FqQUDEBsmTtAA/mVAFyxbDNaIi40/DICxALYVLUZAYqDYIegCkAJcsQDz0hCKBeQYISoW+JYB4x4aC/jYGGFAUWaiJEcDAFrfzjkeNFsnAAAAAElFTkSuQmCC'
 
 let tray: Tray | null = null
 let state: MenuBarState | null = null
@@ -54,6 +58,8 @@ function resolveTrayIcon(): Electron.NativeImage {
     const icon = nativeImage.createFromPath(path)
     console.log(`[WorkThief] tray icon candidate: ${path} isEmpty=${icon.isEmpty()}`)
     if (!icon.isEmpty()) {
+      // Template only for *Template* files (white opaque on transparent).
+      // Color icon.png must stay non-template so it remains visible on dark menu bars.
       if (path.includes('iconTemplate')) {
         icon.setTemplateImage(true)
       }
@@ -62,12 +68,9 @@ function resolveTrayIcon(): Electron.NativeImage {
     }
   }
 
-  // Never new Tray(empty). Prefer embedded template PNG for macOS menu bar.
-  const icon = nativeImage.createFromDataURL(EMBEDDED_TEMPLATE_PNG)
-  if (!icon.isEmpty()) {
-    icon.setTemplateImage(true)
-  }
-  console.log(`[WorkThief] tray icon chosen: <embedded-fallback> isEmpty=${icon.isEmpty()}`)
+  // Never new Tray(empty). Color block — do NOT setTemplateImage (would vanish).
+  const icon = nativeImage.createFromDataURL(EMBEDDED_COLOR_PNG)
+  console.log(`[WorkThief] tray icon chosen: <embedded-color-fallback> isEmpty=${icon.isEmpty()}`)
   return icon
 }
 
@@ -77,6 +80,7 @@ export function initTray(): void {
   tray.setToolTip('WorkThief')
   // Title immediately so the item is findable even before books load / with empty shelf.
   tray.setTitle(EMPTY_HINT)
+  console.log(`[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())}`)
 }
 
 export function setState(newState: MenuBarState): void {
