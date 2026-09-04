@@ -46,12 +46,12 @@ export function getState(): MenuBarState | null {
 
 function resolveTrayIcon(): Electron.NativeImage {
   const candidates = [
-    join(process.cwd(), 'resources/iconTemplate.png'),
     join(process.cwd(), 'resources/icon.png'),
-    join(app.getAppPath(), 'resources/iconTemplate.png'),
     join(app.getAppPath(), 'resources/icon.png'),
-    join(__dirname, '../../resources/iconTemplate.png'),
-    join(__dirname, '../../resources/icon.png')
+    join(__dirname, '../../resources/icon.png'),
+    join(process.cwd(), 'resources/iconTemplate.png'),
+    join(app.getAppPath(), 'resources/iconTemplate.png'),
+    join(__dirname, '../../resources/iconTemplate.png')
   ]
 
   for (const path of candidates) {
