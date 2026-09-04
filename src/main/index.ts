@@ -53,6 +53,8 @@ app.on('second-instance', () => {
 app.whenReady().then(async () => {
   // Tray first so a native crash / throw in db or watcher still leaves a menu-bar item.
   initTray()
+  // Wire menu immediately — some Electron builds paint the status item only after a menu exists.
+  refreshContextMenu()
   notifyStarted()
 
   try {

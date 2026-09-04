@@ -33,6 +33,9 @@ Menu-bar icon uses resources/icon.png and iconTemplate.png (teal book + W glyph)
 | 状态 | 菜单栏标题 |
 |---|---|
 | 书架空 | `WorkThief · 放 txt` |
+
+> **找不到托盘？** macOS 状态栏图标在菜单栏**最右侧**（时钟 / 控制中心旁），不在左边苹果菜单附近。刘海机型可能被挤进 `‹‹`。开发态底部 Dock 是 Electron 图标，正常。
+
 | 阅读中 | `章节号. 当前页正文`（约 80 字截断） |
 | Boss Key 开 | 标题清空，图标保留 |
 

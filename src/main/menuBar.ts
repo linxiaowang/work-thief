@@ -75,12 +75,26 @@ function resolveTrayIcon(): Electron.NativeImage {
 }
 
 export function initTray(): void {
-  const icon = resolveTrayIcon()
+  let icon = resolveTrayIcon()
+  // Menu bar expects ~18–22px; oversized / odd assets can fail to paint on retina.
+  const size = icon.getSize()
+  if (size.width !== 22 || size.height !== 22) {
+    icon = icon.resize({ width: 22, height: 22 })
+  }
   tray = new Tray(icon)
+  tray.setIgnoreDoubleClickEvents(true)
   tray.setToolTip('WorkThief')
   // Title immediately so the item is findable even before books load / with empty shelf.
   tray.setTitle(EMPTY_HINT)
-  console.log(`[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())}`)
+  console.log(
+    `[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())} iconSize=${JSON.stringify(tray.getBounds?.() ? 'bounds-ok' : 'n/a')}`
+  )
+  try {
+    const b = tray.getBounds()
+    console.log(`[WorkThief] tray bounds: ${JSON.stringify(b)} (macOS status item is on the RIGHT of the menu bar)`)
+  } catch (err) {
+    console.log('[WorkThief] tray.getBounds unavailable', err)
+  }
 }
 
 export function setState(newState: MenuBarState): void {
