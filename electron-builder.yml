@@ -1,0 +1,38 @@
+appId: com.shawnlin.workthief
+productName: WorkThief
+directories:
+  output: release/${version}
+  buildResources: resources
+files:
+  - "out/**/*"
+  - "resources/**/*"
+  - "package.json"
+asar: true
+mac:
+  category: public.app-category.productivity
+  icon: resources/icon.png
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  entitlements: resources/entitlements/macos.plist
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  extendInfo:
+    NSHumanReadableCopyright: "© 2025 Shawn Lin"
+    LSApplicationCategoryType: public.app-category.productivity
+    NSAppleEventsUsageDescription: "WorkThief needs to register global hotkeys to hide the reader instantly."
+    NSDesktopFolderUsageDescription: "WorkThief needs access to your Desktop folder to import novels."
+    NSDocumentsFolderUsageDescription: "WorkThief needs access to your Documents folder to import novels."
+    NSDownloadsFolderUsageDescription: "WorkThief needs access to your Downloads folder to import novels."
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: "Plain Text"
+        CFBundleTypeRole: "Viewer"
+        LSItemContentTypes:
+          - "public.plain-text"
+          - "public.text"
+        LSHandlerRank: "Alternate"
+dmg:
+  sign: false
+  writeUpdateInfo: false

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- For global hotkeys (Boss Key) to work, this entitlement is required
+       on macOS 10.15+. Without it, globalShortcut.register() silently fails. -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+
+  <!-- Allow file picker access. -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+
+  <!-- Disable sandbox for menu-bar apps so they can register hotkeys
+       and access arbitrary .txt files. Remove for App Store distribution. -->
+  <key>com.apple.security.app-sandbox</key>
+  <false/>
+</dict>
+</plist>

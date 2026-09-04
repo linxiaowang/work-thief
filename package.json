@@ -1,0 +1,45 @@
+{
+  "name": "work-thief",
+  "version": "0.2.0",
+  "description": "Menu-bar novel reader for the slacking professional.",
+  "main": "out/main/index.js",
+  "type": "module",
+  "author": "Shawn Lin",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite build && electron-vite dev",
+    "dev:fast": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "setup:electron": "node node_modules/electron/install.js",
+    "setup:native": "electron-builder install-app-deps",
+    "setup": "pnpm run setup:electron && pnpm run setup:native",
+    "postinstall": "pnpm run setup || true",
+    "pack": "electron-vite build && electron-builder --mac --dir",
+    "dist": "electron-vite build && electron-builder --mac"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "chokidar": "^4.0.1",
+    "jschardet": "^3.1.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.9.0",
+    "electron": "^32.2.5",
+    "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
