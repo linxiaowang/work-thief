@@ -44,54 +44,66 @@ export function getState(): MenuBarState | null {
   return state
 }
 
-function resolveTrayIcon(): Electron.NativeImage {
+function resolveTrayIcon(): Electron.NativeImage | null {
+  // Prefer template (macOS status-item standard) over color PNG — color icons often fail to paint.
   const candidates = [
-    join(process.cwd(), 'resources/icon.png'),
-    join(app.getAppPath(), 'resources/icon.png'),
-    join(__dirname, '../../resources/icon.png'),
     join(process.cwd(), 'resources/iconTemplate.png'),
     join(app.getAppPath(), 'resources/iconTemplate.png'),
-    join(__dirname, '../../resources/iconTemplate.png')
+    join(__dirname, '../../resources/iconTemplate.png'),
+    join(process.cwd(), 'resources/icon.png'),
+    join(app.getAppPath(), 'resources/icon.png'),
+    join(__dirname, '../../resources/icon.png')
   ]
 
   for (const path of candidates) {
     const icon = nativeImage.createFromPath(path)
     console.log(`[WorkThief] tray icon candidate: ${path} isEmpty=${icon.isEmpty()}`)
     if (!icon.isEmpty()) {
-      // Template only for *Template* files (white opaque on transparent).
-      // Color icon.png must stay non-template so it remains visible on dark menu bars.
       if (path.includes('iconTemplate')) {
         icon.setTemplateImage(true)
       }
-      console.log(`[WorkThief] tray icon chosen: ${path} isEmpty=${icon.isEmpty()}`)
+      console.log(`[WorkThief] tray icon chosen: ${path} isEmpty=${icon.isEmpty()} template=${path.includes('iconTemplate')}`)
       return icon
     }
   }
 
-  // Never new Tray(empty). Color block — do NOT setTemplateImage (would vanish).
   const icon = nativeImage.createFromDataURL(EMBEDDED_COLOR_PNG)
   console.log(`[WorkThief] tray icon chosen: <embedded-color-fallback> isEmpty=${icon.isEmpty()}`)
+  if (icon.isEmpty()) return null
   return icon
 }
 
 export function initTray(): void {
-  let icon = resolveTrayIcon()
-  // Menu bar expects ~18–22px; oversized / odd assets can fail to paint on retina.
-  const size = icon.getSize()
-  if (size.width !== 22 || size.height !== 22) {
-    icon = icon.resize({ width: 22, height: 22 })
-  }
-  tray = new Tray(icon)
+  // Reliable macOS text status-item: create with empty image FIRST, then setTitle.
+  // Colored PNGs often fail to paint; empty + title is the pattern that shows up.
+  tray = new Tray(nativeImage.createEmpty())
   tray.setIgnoreDoubleClickEvents(true)
   tray.setToolTip('WorkThief')
-  // Title immediately so the item is findable even before books load / with empty shelf.
   tray.setTitle(EMPTY_HINT)
-  console.log(
-    `[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())} iconSize=${JSON.stringify(tray.getBounds?.() ? 'bounds-ok' : 'n/a')}`
-  )
+  console.log(`[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())}`)
+
+  // Optional image after title is mounted — prefer template over color.
+  try {
+    let icon = resolveTrayIcon()
+    if (icon && !icon.isEmpty()) {
+      const size = icon.getSize()
+      if (size.width !== 18 || size.height !== 18) {
+        icon = icon.resize({ width: 18, height: 18 })
+      }
+      tray.setImage(icon)
+      console.log(`[WorkThief] tray setImage after title size=${JSON.stringify(icon.getSize())}`)
+    } else {
+      console.log('[WorkThief] tray keeping empty image; title-only status item')
+    }
+  } catch (err) {
+    console.log('[WorkThief] tray.setImage skipped', err)
+  }
+
   try {
     const b = tray.getBounds()
-    console.log(`[WorkThief] tray bounds: ${JSON.stringify(b)} (macOS status item is on the RIGHT of the menu bar)`)
+    console.log(
+      `[WorkThief] tray bounds: ${JSON.stringify(b)} (macOS status item is on the RIGHT; {0,0,0,0} means not on menu bar)`
+    )
   } catch (err) {
     console.log('[WorkThief] tray.getBounds unavailable', err)
   }
