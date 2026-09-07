@@ -103,6 +103,13 @@ app.whenReady().then(async () => {
   })
 })
 
+// Tray-only app: closing BrowserWindows (hotkey capture / settings) must NEVER quit.
+// Without this listener Electron quits when the last window closes — Esc cancel
+// closes the invisible capture window and would kill the whole app.
+app.on('window-all-closed', () => {
+  // Intentionally empty — user quits only via tray 「退出」 → app.quit().
+})
+
 app.on('before-quit', () => {
   unregisterAllShortcuts()
   closeDb()

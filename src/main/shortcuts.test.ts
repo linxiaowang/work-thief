@@ -148,7 +148,55 @@ describe('shortcuts', () => {
     expect(findHotkeyConflict('toggleHidden', 'CmdOrCtrl+Alt+.', current)).toBe('nextPage')
   })
 
-  it('inputToAccelerator builds combos and ignores bare keys', () => {
+  it('inputToAccelerator allows bare arrows/F-keys; ignores bare letters', () => {
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'ArrowLeft',
+        code: 'ArrowLeft',
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false
+      })
+    ).toBe('Left')
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'ArrowRight',
+        code: 'ArrowRight',
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false
+      })
+    ).toBe('Right')
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'F2',
+        code: 'F2',
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false
+      })
+    ).toBe('F2')
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'PageDown',
+        code: 'PageDown',
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false
+      })
+    ).toBe('PageDown')
+
     expect(
       inputToAccelerator({
         type: 'keyDown',

@@ -43,6 +43,8 @@ let lastRegistered: Record<string, string> = {}
 let recordingBinding: HotkeyBinding | null = null
 let captureWin: BrowserWindow | null = null
 let onHotkeysChanged: (() => void) | null = null
+let successTipTimer: ReturnType<typeof setTimeout> | null = null
+const SUCCESS_TIP_MS = 2000
 
 export function setHotkeysChangedHandler(fn: () => void): void {
   onHotkeysChanged = fn
@@ -53,7 +55,7 @@ export function setHotkeysChangedHandler(fn: () => void): void {
  * repeatedly — unregisters prior bindings first.
  * Does NOT register chapter hotkeys (menu-only).
  */
-export function applyShortcuts(): { ok: boolean; failures: string[] } {
+export function applyShortcuts(opts?: { quiet?: boolean }): { ok: boolean; failures: string[] } {
   const failures: string[] = []
   const settings = getSettings()
   const keys = resolveHotkeys(settings)
@@ -87,7 +89,7 @@ export function applyShortcuts(): { ok: boolean; failures: string[] } {
   tryRegister(keys.toggleHidden, 'toggleHidden')
 
   const ok = failures.length === 0
-  if (!ok) {
+  if (!ok && !opts?.quiet) {
     notifyShortcutFailure(failures)
   }
   return { ok, failures }
@@ -203,7 +205,8 @@ export function normalizeAccelerator(accel: string): string {
 
 /**
  * Convert Electron before-input-event payload to an accelerator string.
- * Returns null for pure modifiers / incomplete combos.
+ * Returns null for pure modifiers / incomplete combos / bare letters.
+ * Bare arrows, PageUp/Down, Home/End, Insert/Delete, F1–F24 are allowed.
  * Returns 'Escape' for Esc (cancel sentinel).
  */
 export function inputToAccelerator(input: {
@@ -249,10 +252,30 @@ export function inputToAccelerator(input: {
 
   const keyPart = normalizeInputKey(input)
   if (!keyPart) return null
-  // Global hotkeys need at least one modifier so we don't steal plain typing.
-  if (parts.length === 0) return null
+  // Bare letters/digits need a modifier so we don't steal plain typing.
+  // Navigation / function keys may be bound alone (prev/next/Boss).
+  if (parts.length === 0 && !isBareHotkeyAllowed(keyPart)) return null
   parts.push(keyPart)
   return parts.join('+')
+}
+
+/** Keys allowed as single-key global accelerators (no modifier). */
+function isBareHotkeyAllowed(keyPart: string): boolean {
+  if (
+    keyPart === 'Left' ||
+    keyPart === 'Right' ||
+    keyPart === 'Up' ||
+    keyPart === 'Down' ||
+    keyPart === 'PageUp' ||
+    keyPart === 'PageDown' ||
+    keyPart === 'Home' ||
+    keyPart === 'End' ||
+    keyPart === 'Insert' ||
+    keyPart === 'Delete'
+  ) {
+    return true
+  }
+  return /^F([1-9]|1[0-9]|2[0-4])$/i.test(keyPart)
 }
 
 function normalizeInputKey(input: { key: string; code: string }): string | null {
@@ -331,6 +354,7 @@ export function startHotkeyRecording(binding: HotkeyBinding): void {
   if (recordingBinding) {
     cancelHotkeyRecording()
   }
+  clearSuccessTipTimer()
   recordingBinding = binding
   unregisterAllShortcuts()
   showWaitingHint()
@@ -484,15 +508,15 @@ async function commitRecordedAccelerator(
   const previous = settings[settingKey] as string
   updateSettings({ [settingKey]: accelerator } as Partial<AppSettings>)
 
-  // Probe-register: apply all; if this binding failed, revert.
-  const result = applyShortcuts()
+  // Probe-register quietly; on failure always notify with a clear reason (never silent).
+  const result = applyShortcuts({ quiet: true })
   const failedThis = result.failures.some((f) => f.startsWith(`${binding}:`))
   if (failedThis) {
     updateSettings({ [settingKey]: previous } as Partial<AppSettings>)
     applyShortcuts()
     notifyTip(
       '快捷键无法注册',
-      `「${friendlyAccel(accelerator)}」注册失败（可能与系统或其他应用冲突）。`
+      `「${friendlyAccel(accelerator)}」注册失败（可能被系统保留，或与其他应用冲突）。请换一组。`
     )
     showWaitingHint()
     if (captureWin && !captureWin.isDestroyed()) {
@@ -508,15 +532,51 @@ async function commitRecordedAccelerator(
   finishRecording(accelerator)
 }
 
-function finishRecording(_committed: string | null): void {
+function clearSuccessTipTimer(): void {
+  if (successTipTimer != null) {
+    clearTimeout(successTipTimer)
+    successTipTimer = null
+  }
+}
+
+function showSuccessTip(committed: string): void {
+  const tip = `已设为 ${friendlyAccel(committed)}`
+  const tray = getTray()
+  if (tray) {
+    try {
+      tray.setTitle(tip)
+      tray.setToolTip(tip)
+    } catch {
+      // ignore
+    }
+  }
+  notifyTip('快捷键已更新', tip)
+  clearSuccessTipTimer()
+  successTipTimer = setTimeout(() => {
+    successTipTimer = null
+    try {
+      render()
+    } catch {
+      // ignore
+    }
+  }, SUCCESS_TIP_MS)
+}
+
+function finishRecording(committed: string | null): void {
   recordingBinding = null
   closeCaptureWindow()
   // Re-apply in case cancel left shortcuts unregistered.
   applyShortcuts()
-  try {
-    render()
-  } catch {
-    // ignore
+  if (committed) {
+    // Brief tray confirmation, then restore novel title.
+    showSuccessTip(committed)
+  } else {
+    clearSuccessTipTimer()
+    try {
+      render()
+    } catch {
+      // ignore
+    }
   }
   onHotkeysChanged?.()
 }
@@ -525,6 +585,7 @@ export const _internals = {
   DEFAULT_HOTKEYS,
   ACCESSIBILITY_HINT,
   WAITING_HINT,
+  SUCCESS_TIP_MS,
   SETTING_KEY,
   BINDING_LABEL
 }
