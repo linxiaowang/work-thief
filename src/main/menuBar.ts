@@ -76,13 +76,14 @@ export function setRightClickHandler(fn: () => void): void {
 }
 
 function resolveTrayIcon(): Electron.NativeImage | null {
+  // Prefer small tray assets only — NEVER the 1024×1024 app icon (resources/icon.png).
   const candidates = [
+    join(process.cwd(), 'resources/tray-icon.png'),
+    join(app.getAppPath(), 'resources/tray-icon.png'),
+    join(__dirname, '../../resources/tray-icon.png'),
     join(process.cwd(), 'resources/iconTemplate.png'),
     join(app.getAppPath(), 'resources/iconTemplate.png'),
-    join(__dirname, '../../resources/iconTemplate.png'),
-    join(process.cwd(), 'resources/icon.png'),
-    join(app.getAppPath(), 'resources/icon.png'),
-    join(__dirname, '../../resources/icon.png')
+    join(__dirname, '../../resources/iconTemplate.png')
   ]
 
   for (const path of candidates) {

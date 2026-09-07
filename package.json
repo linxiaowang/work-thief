@@ -15,7 +15,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "rebuild": "electron-builder install-app-deps",
     "setup:electron": "node node_modules/electron/install.js",
     "setup:native": "electron-builder install-app-deps",
     "setup": "pnpm run setup:electron && pnpm run setup:native",
