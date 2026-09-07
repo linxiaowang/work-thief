@@ -1,7 +1,13 @@
 import { app, Menu, Notification } from 'electron'
 import { getDb, closeDb } from './db/client'
 import { listBooks } from './db/books'
-import { applyShortcuts, unregisterAllShortcuts } from './shortcuts'
+import {
+  applyShortcuts,
+  unregisterAllShortcuts,
+  startHotkeyRecording,
+  resetHotkeysToDefaults,
+  setHotkeysChangedHandler
+} from './shortcuts'
 import { resumeWatching, ensureWatchedFolder } from './watcher'
 import {
   initTray,
@@ -24,7 +30,7 @@ import { openSettingsWindow, wireSettingsIpc, setSettingsSavedHandler } from './
  * WorkThief — menu-bar novel reader.
  *
  * Novel text via Tray.setTitle(). Left-click pages; right-click menu.
- * Hotkeys: CommandOrControl+Alt+./, and Boss M. First-run: choose TXT.
+ * Hotkeys: CommandOrControl+Alt+./, and Boss M (customizable). First-run: choose TXT.
  */
 
 const gotLock = app.requestSingleInstanceLock()
@@ -60,6 +66,7 @@ let trayMenu: Menu | null = null
 app.whenReady().then(async () => {
   wireSettingsIpc()
   setSettingsSavedHandler(() => refreshContextMenu())
+  setHotkeysChangedHandler(() => refreshContextMenu())
   setChooseNovelHandler(() => {
     void chooseNovel().then(refreshContextMenu)
   })
@@ -155,6 +162,13 @@ function refreshContextMenu(): void {
     },
     onToggleHidden: () => {
       toggleHidden()
+      refreshContextMenu()
+    },
+    onRebindHotkey: (binding) => {
+      startHotkeyRecording(binding)
+    },
+    onResetHotkeys: () => {
+      resetHotkeysToDefaults()
       refreshContextMenu()
     },
     onQuit: () => app.quit()

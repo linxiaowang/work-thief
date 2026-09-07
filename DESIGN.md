@@ -86,7 +86,7 @@ AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber 
 
 ---
 
-## 6. 热键默认（Thief-style）
+## 6. 热键（Thief-style 默认 + 可自定义）
 
 | Accelerator | 动作 |
 |---|---|
@@ -95,6 +95,8 @@ AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber 
 | CommandOrControl+Alt+M | Boss Key |
 
 章节跳转仅右键菜单（默认不注册翻章热键）。
+
+自定义：右键托盘 →「快捷键」子菜单（显示当前 accelerator）→ 点击进入「等待按键」→ 下一组全局组合键写入 settings 并 `applyShortcuts`；Esc 取消；与另两个绑定冲突或 register 失败则提示并拒绝；「恢复默认」还原上表。录制时暂时 unregister，用短命 invisible BrowserWindow + `before-input-event` 捕获。
 
 macOS 需辅助功能权限；注册失败时仅 Notification（不覆盖托盘小说标题）。
 

@@ -15,8 +15,21 @@ vi.mock('electron', () => ({
     },
     { isSupported: () => true }
   ),
+  BrowserWindow: class {
+    webContents = { on: vi.fn() }
+    once = vi.fn()
+    on = vi.fn()
+    show = vi.fn()
+    focus = vi.fn()
+    close = vi.fn()
+    setOpacity = vi.fn()
+    isDestroyed = () => false
+    removeAllListeners = vi.fn()
+    loadURL = vi.fn(async () => undefined)
+  },
   app: {
     isReady: () => true,
+    focus: vi.fn(),
     getPath: () => process.cwd() + '/.test-userdata'
   }
 }))
@@ -33,16 +46,39 @@ vi.mock('./db/settings', () => ({
     moyuText: '工作中',
     showPageNumber: false,
     preferredEncoding: 'auto'
-  })
+  }),
+  updateSettings: vi.fn((patch: Record<string, unknown>) => ({
+    hotkeyNextPage: 'CommandOrControl+Alt+.',
+    hotkeyPrevPage: 'CommandOrControl+Alt+,',
+    hotkeyNextChapter: '',
+    hotkeyPrevChapter: '',
+    hotkeyToggleHidden: 'CommandOrControl+Alt+M',
+    watchedFolder: null,
+    charsPerPage: 20,
+    moyuText: '工作中',
+    showPageNumber: false,
+    preferredEncoding: 'auto',
+    ...patch
+  }))
 }))
 
 vi.mock('./menuBar', () => ({
   nextPage: vi.fn(),
   prevPage: vi.fn(),
-  toggleHidden: vi.fn()
+  toggleHidden: vi.fn(),
+  getTray: () => null,
+  render: vi.fn()
 }))
 
-const { applyShortcuts, formatShortcutCopy, _internals } = await import('./shortcuts')
+const {
+  applyShortcuts,
+  formatShortcutCopy,
+  inputToAccelerator,
+  normalizeAccelerator,
+  findHotkeyConflict,
+  friendlyAccel,
+  _internals
+} = await import('./shortcuts')
 
 describe('shortcuts', () => {
   beforeEach(() => {
@@ -87,6 +123,90 @@ describe('shortcuts', () => {
     expect(copy).toContain('下一页')
     expect(copy).toContain('上一页')
     expect(copy).toContain('Boss')
-    expect(copy).toMatch(/[⌘⌃].*⌥/)
+    expect(copy).toMatch(/⌥/)
+    expect(copy).toContain('M')
+  })
+
+  it('friendlyAccel maps modifiers', () => {
+    expect(friendlyAccel('CommandOrControl+Alt+M')).toMatch(/⌥/)
+    expect(friendlyAccel('CommandOrControl+Alt+M')).toContain('M')
+  })
+
+  it('normalizeAccelerator canonicalizes aliases', () => {
+    expect(normalizeAccelerator('CmdOrCtrl+Option+m')).toBe('CommandOrControl+Alt+M')
+    expect(normalizeAccelerator('Control+Alt+,')).toBe('Control+Alt+,')
+  })
+
+  it('findHotkeyConflict detects reuse among the three bindings', () => {
+    const current = {
+      prevPage: 'CommandOrControl+Alt+,',
+      nextPage: 'CommandOrControl+Alt+.',
+      toggleHidden: 'CommandOrControl+Alt+M'
+    }
+    expect(findHotkeyConflict('prevPage', 'CommandOrControl+Alt+.', current)).toBe('nextPage')
+    expect(findHotkeyConflict('prevPage', 'CommandOrControl+Alt+,', current)).toBeNull()
+    expect(findHotkeyConflict('toggleHidden', 'CmdOrCtrl+Alt+.', current)).toBe('nextPage')
+  })
+
+  it('inputToAccelerator builds combos and ignores bare keys', () => {
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'm',
+        code: 'KeyM',
+        control: false,
+        meta: true,
+        alt: true,
+        shift: false
+      })
+    ).toBe('CommandOrControl+Alt+M')
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: ',',
+        code: 'Comma',
+        control: false,
+        meta: true,
+        alt: true,
+        shift: false
+      })
+    ).toBe('CommandOrControl+Alt+,')
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'Escape',
+        code: 'Escape',
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false
+      })
+    ).toBe('Escape')
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'a',
+        code: 'KeyA',
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false
+      })
+    ).toBeNull()
+
+    expect(
+      inputToAccelerator({
+        type: 'keyDown',
+        key: 'Meta',
+        code: 'MetaLeft',
+        control: false,
+        meta: true,
+        alt: false,
+        shift: false
+      })
+    ).toBeNull()
   })
 })

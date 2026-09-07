@@ -2,6 +2,11 @@ import { Menu, MenuItemConstructorOptions } from 'electron'
 import { listBooks, getBook, touchBookOpened } from './db/books'
 import { listChapters } from './db/chapters'
 import { getState, getCurrentPages } from './menuBar'
+import {
+  friendlyAccel,
+  getHotkeyAccelerators,
+  type HotkeyBinding
+} from './shortcuts'
 
 export interface ContextMenuCallbacks {
   onOpenSettings: () => void
@@ -11,11 +16,13 @@ export interface ContextMenuCallbacks {
   onSwitchBook: (id: number) => void
   onJumpToChapter: (idx: number) => void
   onToggleHidden: () => void
+  onRebindHotkey: (binding: HotkeyBinding) => void
+  onResetHotkeys: () => void
   onQuit: () => void
 }
 
 /**
- * Tray menu: Settings / Choose novel / Prev·Next / Boss / Quit.
+ * Tray menu: Settings / Choose novel / Prev·Next / Boss / Hotkeys / Quit.
  * Bookshelf + chapter jump stay as optional extras.
  */
 export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
@@ -28,6 +35,8 @@ export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
     currentBook && totalPages > 0
       ? ` · ${(state?.pageIndex ?? 0) + 1}/${totalPages}`
       : ''
+
+  const hotkeys = getHotkeyAccelerators()
 
   const items: MenuItemConstructorOptions[] = []
 
@@ -105,6 +114,29 @@ export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
   items.push({
     label: state?.hidden ? 'Boss：显示小说' : 'Boss：伪装',
     click: cb.onToggleHidden
+  })
+
+  items.push({
+    label: '快捷键',
+    submenu: [
+      {
+        label: `上一页　${friendlyAccel(hotkeys.prevPage)}`,
+        click: () => cb.onRebindHotkey('prevPage')
+      },
+      {
+        label: `下一页　${friendlyAccel(hotkeys.nextPage)}`,
+        click: () => cb.onRebindHotkey('nextPage')
+      },
+      {
+        label: `Boss　${friendlyAccel(hotkeys.toggleHidden)}`,
+        click: () => cb.onRebindHotkey('toggleHidden')
+      },
+      { type: 'separator' },
+      {
+        label: '恢复默认',
+        click: cb.onResetHotkeys
+      }
+    ]
   })
 
   items.push({ type: 'separator' })
