@@ -42,37 +42,29 @@ describe('chapter jump with shared normalization', () => {
   it('jump to 第二章 lands on that chapter opening', () => {
     const parsed = parseTxtText(sampleCrlf, '测试')
     const reading = readingTextOf(sampleCrlf)
-    const pages = paginate(reading, 40)
+    const pages = paginate(reading, 20)
     expect(pages.length).toBeGreaterThan(0)
 
     const ch2 = parsed.chapters.find((c) => c.title.includes('第二章'))!
-    const pageIndex = resolveChapterJumpPageIndex(pages, reading, ch2)
+    const pageIndex = resolveChapterJumpPageIndex(reading, ch2, 20)
     expect(pageIndex).not.toBeNull()
     const page = pages[pageIndex!]
     expect(page).toContain('第二章')
-    expect(page.includes('继续') || page.includes('开场白') || page.includes('第二章')).toBe(
-      true
-    )
   })
 
-  it('title fallback works when startOffset is wrong (legacy misaligned)', () => {
+  it('title search ignores wrong startOffset (legacy misaligned)', () => {
     const reading = readingTextOf(sampleCrlf)
-    const pages = paginate(reading, 40)
+    const pages = paginate(reading, 20)
     const chapters = detectChapters(normalizeLineEndings(sampleCrlf))
     const ch2 = chapters.find((c) => c.title.includes('第二章'))!
-    const bad = { startOffset: 0, title: ch2.title }
-    const pageIndex = resolveChapterJumpPageIndex(pages, reading, bad)
+    const pageIndex = resolveChapterJumpPageIndex(reading, { title: ch2.title }, 20)
     expect(pageIndex).not.toBeNull()
     expect(pages[pageIndex!]).toContain('第二章')
   })
 
   it('returns null when chapter cannot be resolved', () => {
-    const pages = paginate('没有任何章节标题的正文。', 40)
     expect(
-      resolveChapterJumpPageIndex(pages, '没有任何章节标题的正文。', {
-        startOffset: 9999,
-        title: '不存在的章节'
-      })
+      resolveChapterJumpPageIndex('没有任何章节标题的正文。', { title: '不存在的章节' }, 20)
     ).toBeNull()
   })
 })

@@ -42,8 +42,12 @@ export function applyShortcuts(): { ok: boolean; failures: string[] } {
   lastRegistered = {}
 
   const cbs: HotkeyCallbacks = {
-    nextPage: () => nextPage(),
-    prevPage: () => prevPage(),
+    nextPage: () => {
+      void nextPage()
+    },
+    prevPage: () => {
+      void prevPage()
+    },
     toggleHidden: () => toggleHidden()
   }
 

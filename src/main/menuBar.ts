@@ -1,11 +1,12 @@
 import { Tray, nativeImage, app } from 'electron'
 import { join } from 'node:path'
-import { getBook } from './db/books'
-import { listChapters, getChapter } from './db/chapters'
+import { getBook, updateBookParseMeta } from './db/books'
+import { listChapters, getChapter, replaceChapters } from './db/chapters'
 import { getProgress, upsertProgress } from './db/progress'
 import { getSettings } from './db/settings'
 import { paginate, selectPageForOffset, resolveChapterJumpPageIndex } from './pagination'
 import { normalizeNovelText } from './parsers/normalize'
+import { truncateForMenuBar, MENU_BAR_TITLE_MAX, MENU_BAR_TITLE_RETRY } from './trayTitle'
 
 /**
  * MenuBar — owns the macOS menu bar item and all reading state.
@@ -13,8 +14,8 @@ import { normalizeNovelText } from './parsers/normalize'
  * Tray icon stays put. Title shows the current book-wide page.
  * Boss Key toggles novel text ↔ disguise (moyu_text), never blank-only.
  *
- * Page hot path is sync: pages stay in memory after load; next/prev only
- * bump pageIndex + setTitle; SQLite persist is debounced.
+ * Page hot path is sync when pages are cached: next/prev only bump
+ * pageIndex + setTitle; SQLite persist is debounced. Empty cache awaits load.
  */
 
 export interface MenuBarState {
@@ -29,7 +30,6 @@ export interface MenuBarState {
 
 /** Short empty-shelf hint — long Chinese+arrow strings get clipped / hard to spot. */
 const EMPTY_HINT = 'WorkThief · 选 txt'
-
 const PERSIST_DEBOUNCE_MS = 800
 /** Left-click / nextPage debounce so one physical click ≠ two page turns. */
 const NEXT_PAGE_DEBOUNCE_MS = 80
@@ -103,7 +103,7 @@ export function initTray(): void {
   tray = new Tray(nativeImage.createEmpty())
   tray.setIgnoreDoubleClickEvents(true)
   tray.setToolTip('WorkThief')
-  tray.setTitle(EMPTY_HINT)
+  setTrayTitle(EMPTY_HINT)
   console.log(`[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())}`)
 
   try {
@@ -137,7 +137,7 @@ export function initTray(): void {
     if (!state || state.bookId < 0) {
       onNeedChooseNovel?.()
     } else {
-      nextPage()
+      void nextPage()
     }
   })
 
@@ -162,29 +162,30 @@ export function setState(newState: MenuBarState): void {
 export function render(): void {
   if (!tray || !state) return
   if (state.hidden) {
-    tray.setTitle(truncateForMenuBar(resolveDisguiseText()))
+    setTrayTitle(resolveDisguiseText())
     return
   }
   if (state.bookId < 0) {
-    tray.setTitle(EMPTY_HINT)
+    setTrayTitle(EMPTY_HINT)
     return
   }
 
   const page = cachedPages[state.pageIndex]
   if (page == null) {
-    tray.setTitle('…')
+    setTrayTitle('…')
     return
   }
   const settings = getSettings()
   let title = page
   if (settings.showPageNumber && cachedPages.length > 0) {
-    title = `${page}  ${state.pageIndex + 1}/${cachedPages.length}`
+    // Short suffix so body stays visible under the 28-char hard cap.
+    title = `${page}·${state.pageIndex + 1}/${cachedPages.length}`
   }
   // Last page: stop (no wrap) + optional 「·完」 suffix.
   if (cachedPages.length > 0 && state.pageIndex >= cachedPages.length - 1) {
     title = `${title}·完`
   }
-  tray.setTitle(truncateForMenuBar(title))
+  setTrayTitle(title)
 }
 
 /** Boss disguise: custom moyu_text, or current HH:mm when empty. */
@@ -195,6 +196,41 @@ export function resolveDisguiseText(): string {
   const hh = String(now.getHours()).padStart(2, '0')
   const mm = String(now.getMinutes()).padStart(2, '0')
   return `${hh}:${mm}`
+}
+
+/**
+ * Re-parse TXT from disk and rewrite chapters so offsets match current
+ * reading-text normalization (auto-fixes legacy imports).
+ */
+export async function refreshChaptersFromFile(bookId: number): Promise<void> {
+  const book = getBook(bookId)
+  if (!book) return
+  try {
+    const settings = getSettings()
+    const { readFile } = await import('node:fs/promises')
+    const buf = await readFile(book.filePath)
+    const { decodeWithPreference } = await import('./parsers/encoding')
+    const { text, encoding } = decodeWithPreference(buf, settings.preferredEncoding)
+    const { parseTxtText } = await import('./parsers/txt')
+    const parsed = parseTxtText(text, book.title, encoding)
+    replaceChapters(
+      bookId,
+      parsed.chapters.map((c) => ({
+        bookId,
+        index: c.index,
+        title: c.title,
+        startOffset: c.startOffset,
+        charCount: c.charCount
+      }))
+    )
+    updateBookParseMeta(bookId, {
+      encoding: parsed.encoding,
+      chapterCount: parsed.chapters.length,
+      totalChars: parsed.totalChars
+    })
+  } catch (err) {
+    console.error('[WorkThief] refreshChaptersFromFile failed', { bookId, err })
+  }
 }
 
 export async function loadBookPages(): Promise<void> {
@@ -241,10 +277,10 @@ export async function reloadPagination(): Promise<void> {
 }
 
 /**
- * Sync page hot path: memory only — no loadBookPages, no listChapters, no SQLite.
- * Persist is debounced. At last page: STOP (do not wrap).
+ * Page forward. When cache is warm: sync bump + setTitle.
+ * When empty: await loadBookPages, then page; still empty → status message (never silent).
  */
-export function nextPage(): void {
+export async function nextPage(): Promise<void> {
   if (!state) return
   const now = Date.now()
   if (now - lastNextPageAt < NEXT_PAGE_DEBOUNCE_MS) return
@@ -260,7 +296,13 @@ export function nextPage(): void {
     render()
     return
   }
-  if (cachedPages.length === 0) return
+  if (cachedPages.length === 0) {
+    await loadBookPages()
+    if (cachedPages.length === 0) {
+      setTrayTitle('无内容·重新选书')
+      return
+    }
+  }
   if (state.pageIndex < cachedPages.length - 1) {
     state.pageIndex++
   }
@@ -269,8 +311,8 @@ export function nextPage(): void {
   schedulePersistProgress()
 }
 
-/** Sync prev; at first page STOP (do not wrap to last). */
-export function prevPage(): void {
+/** Prev page; empty cache loads first. At first page STOP (do not wrap). */
+export async function prevPage(): Promise<void> {
   if (!state) return
   if (state.bookId < 0) {
     onNeedChooseNovel?.()
@@ -282,7 +324,13 @@ export function prevPage(): void {
     render()
     return
   }
-  if (cachedPages.length === 0) return
+  if (cachedPages.length === 0) {
+    await loadBookPages()
+    if (cachedPages.length === 0) {
+      setTrayTitle('无内容·重新选书')
+      return
+    }
+  }
   if (state.pageIndex > 0) {
     state.pageIndex--
   }
@@ -308,7 +356,10 @@ export async function prevChapter(): Promise<void> {
   await jumpToChapter(prev.index)
 }
 
-/** Optional chapter jump — maps chapter start offset → book-wide page. */
+/**
+ * Chapter jump — locate title in cachedBookText (ignore stored offsets).
+ * pageIndex = floor(idx / charsPerPage). Not found → 「找不到该章」, keep current page.
+ */
 export async function jumpToChapter(chapterIndex: number): Promise<void> {
   if (!state || state.bookId < 0) return
   // Force exit Boss disguise so novel text shows immediately after jump.
@@ -322,39 +373,55 @@ export async function jumpToChapter(chapterIndex: number): Promise<void> {
       hasText: !!cachedBookText,
       pageCount: cachedPages.length
     })
-    failJump()
+    failJumpNotFound()
     return
   }
 
-  const pageIndex = resolveChapterJumpPageIndex(cachedPages, cachedBookText, chapter)
+  const settings = getSettings()
+  const title = chapter.title?.trim() ?? ''
+  let occurrence = 0
+  for (const c of listChapters(state.bookId)) {
+    if (c.index >= chapterIndex) break
+    if ((c.title?.trim() ?? '') === title) occurrence++
+  }
+
+  const pageIndex = resolveChapterJumpPageIndex(
+    cachedBookText,
+    chapter,
+    settings.charsPerPage,
+    occurrence
+  )
   if (pageIndex == null || cachedPages[pageIndex] == null) {
-    console.error('[WorkThief] jumpToChapter failed: could not resolve page', {
+    console.error('[WorkThief] jumpToChapter failed: title not in reading text', {
       chapterIndex,
       title: chapter.title,
-      startOffset: chapter.startOffset,
       textLength: cachedBookText.length,
-      pageCount: cachedPages.length
+      pageCount: cachedPages.length,
+      occurrence
     })
-    failJump()
+    failJumpNotFound()
     return
   }
 
   state.chapterIndex = chapterIndex
-  state.pageIndex = pageIndex
+  state.pageIndex = Math.min(pageIndex, cachedPages.length - 1)
   // Immediate novel title (Boss already cleared).
   render()
   schedulePersistProgress(true)
 }
 
-/** Show jump failure on tray; fall back to first page for recovery. */
-function failJump(): void {
+/** Title not found: keep current page (never blank); show status on tray. */
+function failJumpNotFound(): void {
   if (!state) return
-  state.pageIndex = 0
   state.hidden = false
-  if (tray) {
-    tray.setTitle('跳转失败')
+  // Keep pageIndex — do not jump to 0 / blank.
+  setTrayTitle('找不到该章')
+  // Also ensure current page remains available on next click.
+  if (cachedPages.length > 0 && cachedPages[state.pageIndex] != null) {
+    // Title shows the error; progress unchanged.
+  } else if (cachedPages.length > 0) {
+    state.pageIndex = Math.min(state.pageIndex, cachedPages.length - 1)
   }
-  schedulePersistProgress(true)
 }
 
 export function setHidden(hidden: boolean): void {
@@ -370,7 +437,7 @@ export function toggleHidden(): void {
 }
 
 /**
- * Switch book and restore approximate book-wide page from progress fraction.
+ * Switch book: re-parse chapters from file (fix offsets), then restore page.
  */
 export async function switchToBook(bookId: number): Promise<void> {
   const book = getBook(bookId)
@@ -383,13 +450,22 @@ export async function switchToBook(bookId: number): Promise<void> {
     hidden: state?.hidden ?? false
   }
   cachedBookKey = null
+  cachedBookText = null
+  cachedPages = []
+  await refreshChaptersFromFile(bookId)
   await loadBookPages()
-  if (progress && cachedBookText && cachedPages.length > 0) {
-    const approxOffset = Math.floor((progress.chapterProgress ?? 0) * cachedBookText.length)
+  // Re-read after await: TS narrows module `let` to null after assignment above.
+  const reading = cachedBookText as string | null
+  if (progress && reading && cachedPages.length > 0) {
+    const approxOffset = Math.floor((progress.chapterProgress ?? 0) * reading.length)
     state.pageIndex = selectPageForOffset(cachedPages, approxOffset).pageIndex
     syncChapterIndexFromOffset()
   }
-  render()
+  if (cachedPages.length === 0) {
+    setTrayTitle('无内容·重新选书')
+  } else {
+    render()
+  }
   schedulePersistProgress(true)
 }
 
@@ -413,9 +489,21 @@ function syncChapterIndexFromOffset(): void {
     state.chapterIndex = 0
     return
   }
+  // Locate each chapter title in reading text (nth occurrence); ignore legacy offsets.
   let best = chapters[0].index
+  let searchFrom = 0
   for (const c of chapters) {
-    if (c.startOffset <= charsBefore) best = c.index
+    const title = c.title?.trim() ?? ''
+    let offset = c.startOffset
+    if (title) {
+      let idx = cachedBookText.indexOf(title, searchFrom)
+      if (idx < 0) idx = cachedBookText.indexOf(title)
+      if (idx >= 0) {
+        offset = idx
+        searchFrom = idx + Math.max(1, title.length)
+      }
+    }
+    if (offset <= charsBefore) best = c.index
     else break
   }
   state.chapterIndex = best
@@ -451,11 +539,34 @@ function persistProgress(): void {
   upsertProgress(state.bookId, state.chapterIndex, fraction)
 }
 
-function truncateForMenuBar(text: string): string {
-  // Display only — pages are already collapsed; still flatten disguise / legacy newlines.
-  const oneLine = text.replace(/\s*\n\s*/g, ' ').replace(/　+/g, ' ').trim()
-  if (oneLine.length <= 80) return oneLine
-  return oneLine.slice(0, 77) + '…'
+/** setTitle with empty-getTitle retry at 16 chars. */
+function setTrayTitle(text: string): void {
+  if (!tray) return
+  const primary = truncateForMenuBar(text, MENU_BAR_TITLE_MAX)
+  tray.setTitle(primary)
+  let shown = ''
+  try {
+    shown = tray.getTitle() ?? ''
+  } catch {
+    shown = ''
+  }
+  if (!shown) {
+    console.warn(
+      '[WorkThief] tray getTitle() empty after setTitle; retrying with 16 chars',
+      JSON.stringify(primary)
+    )
+    tray.setTitle(truncateForMenuBar(text, MENU_BAR_TITLE_RETRY))
+  }
 }
 
-export const _internals = { PERSIST_DEBOUNCE_MS, NEXT_PAGE_DEBOUNCE_MS, EMPTY_HINT }
+export const _internals = {
+  PERSIST_DEBOUNCE_MS,
+  NEXT_PAGE_DEBOUNCE_MS,
+  EMPTY_HINT,
+  MENU_BAR_TITLE_MAX,
+  MENU_BAR_TITLE_RETRY,
+  setTrayTitle
+}
+
+export { truncateForMenuBar, MENU_BAR_TITLE_MAX, MENU_BAR_TITLE_RETRY } from './trayTitle'
+

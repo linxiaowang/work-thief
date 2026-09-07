@@ -64,7 +64,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkeyPrevChapter: '',
   hotkeyToggleHidden: 'CommandOrControl+Alt+M',
   watchedFolder: null,
-  charsPerPage: 40,
+  charsPerPage: 20,
   moyuText: '工作中',
   showPageNumber: true,
   preferredEncoding: 'auto'

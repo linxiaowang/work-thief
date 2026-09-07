@@ -108,4 +108,15 @@ export function markBookMissing(id: number, missing: boolean): void {
   d.prepare('UPDATE books SET missing = ? WHERE id = ?').run(missing ? 1 : 0, id)
 }
 
+
+export function updateBookParseMeta(
+  id: number,
+  meta: { encoding: string; chapterCount: number; totalChars: number }
+): void {
+  const d = getDb()
+  d.prepare(
+    `UPDATE books SET encoding = ?, chapter_count = ?, total_chars = ? WHERE id = ?`
+  ).run(meta.encoding, meta.chapterCount, meta.totalChars, id)
+}
+
 export { _setDbForTesting } from './client'

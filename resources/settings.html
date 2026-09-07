@@ -140,7 +140,7 @@
     function apply(data) {
       document.getElementById('novelPath').value = data.novelPath || ''
       document.getElementById('novelTitle').textContent = data.novelTitle || ''
-      document.getElementById('charsPerPage').value = data.charsPerPage ?? 40
+      document.getElementById('charsPerPage').value = data.charsPerPage ?? 20
       document.getElementById('encoding').value = data.preferredEncoding || 'auto'
       document.getElementById('moyuText').value = data.moyuText ?? '工作中'
       document.getElementById('showPageNumber').checked = !!data.showPageNumber

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { paginate, selectPageForOffset, readingTextOf } from './pagination'
+import {
+  paginate,
+  selectPageForOffset,
+  readingTextOf,
+  resolveChapterJumpPageIndex,
+  _internals
+} from './pagination'
 
 describe('paginate', () => {
   it('returns empty for blank text', () => {
@@ -9,6 +15,16 @@ describe('paginate', () => {
 
   it('keeps short text as one page', () => {
     expect(paginate('你好世界', 40)).toEqual(['你好世界'])
+  })
+
+  it('defaults to 20 chars per page', () => {
+    expect(_internals.DEFAULT_CHARS_PER_PAGE).toBe(20)
+    const text = '甲'.repeat(45)
+    const pages = paginate(text)
+    expect(pages.length).toBe(3)
+    expect(pages[0].length).toBe(20)
+    expect(pages[1].length).toBe(20)
+    expect(pages[2].length).toBe(5)
   })
 
   it('splits long text into fixed windows without overlap', () => {
@@ -67,5 +83,31 @@ describe('selectPageForOffset', () => {
 
   it('handles empty pages', () => {
     expect(selectPageForOffset([], 0)).toEqual({ pageIndex: 0, page: '' })
+  })
+})
+
+describe('resolveChapterJumpPageIndex', () => {
+  it('uses title location and floor(idx/charsPerPage); ignores startOffset', () => {
+    const reading = '前言。第一章 开始。正文甲。第二章 继续。正文乙。'
+    const idx = reading.indexOf('第二章')
+    expect(idx).toBeGreaterThan(0)
+    const pageIndex = resolveChapterJumpPageIndex(reading, { title: '第二章 继续' }, 20)
+    expect(pageIndex).toBe(Math.floor(idx / 20))
+  })
+
+  it('supports nth occurrence of the same title', () => {
+    const reading = '章X' + '一'.repeat(18) + '章X' + '二'.repeat(10)
+    const first = resolveChapterJumpPageIndex(reading, { title: '章X' }, 10, 0)
+    const second = resolveChapterJumpPageIndex(reading, { title: '章X' }, 10, 1)
+    const secondIdx = reading.indexOf('章X', 2)
+    expect(first).toBe(0)
+    expect(second).toBe(Math.floor(secondIdx / 10))
+    expect(second).toBeGreaterThan(first!)
+  })
+
+  it('returns null when title missing', () => {
+    expect(
+      resolveChapterJumpPageIndex('没有任何章节标题的正文。', { title: '不存在的章节' }, 20)
+    ).toBeNull()
   })
 })

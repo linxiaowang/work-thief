@@ -7,7 +7,7 @@
 
 import { normalizeNovelText } from './parsers/normalize'
 
-const DEFAULT_CHARS_PER_PAGE = 40
+const DEFAULT_CHARS_PER_PAGE = 20
 
 export function paginate(text: string, maxChars: number = DEFAULT_CHARS_PER_PAGE): string[] {
   const limit = Math.max(10, maxChars)
@@ -48,38 +48,29 @@ export function selectPageForOffset(
 }
 
 /**
- * Resolve a chapter jump to a book-wide page index.
- * Prefer normalized startOffset; if that misses the title in body, locate by title.
- * Returns null when neither offset nor title can be resolved.
+ * Resolve a chapter jump by locating chapter.title in the reading text.
+ * Ignores stored startOffset (legacy imports may be misaligned).
+ * occurrence = 0-based nth match (for duplicate titles).
+ * pageIndex = floor(idx / charsPerPage). Returns null if title not found.
  */
 export function resolveChapterJumpPageIndex(
-  pages: string[],
   text: string,
-  chapter: { startOffset: number; title: string }
+  chapter: { title: string },
+  charsPerPage: number,
+  occurrence = 0
 ): number | null {
-  if (pages.length === 0 || !text) return null
-
   const title = chapter.title?.trim() ?? ''
-  const titleAt = title ? text.indexOf(title) : -1
+  if (!title || !text) return null
 
-  let offset: number | null = null
-  if (chapter.startOffset >= 0 && chapter.startOffset <= text.length) {
-    offset = chapter.startOffset
-    // If title exists in body but not near this offset, prefer title location
-    // (covers legacy imports where offsets were computed on differently normalized text).
-    if (titleAt >= 0) {
-      const around = text.slice(
-        Math.max(0, offset - 2),
-        Math.min(text.length, offset + title.length + 8)
-      )
-      if (!around.includes(title)) {
-        offset = titleAt
-      }
-    }
-  } else if (titleAt >= 0) {
-    offset = titleAt
+  const limit = Math.max(10, charsPerPage)
+  let from = 0
+  let idx = -1
+  for (let n = 0; n <= occurrence; n++) {
+    idx = text.indexOf(title, from)
+    if (idx < 0) return null
+    from = idx + Math.max(1, title.length)
   }
-
-  if (offset == null) return null
-  return selectPageForOffset(pages, offset).pageIndex
+  return Math.floor(idx / limit)
 }
+
+export const _internals = { DEFAULT_CHARS_PER_PAGE }

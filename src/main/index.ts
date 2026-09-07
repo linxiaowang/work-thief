@@ -142,12 +142,10 @@ function refreshContextMenu(): void {
       void chooseNovel().then(refreshContextMenu)
     },
     onPrevPage: () => {
-      prevPage()
-      refreshContextMenu()
+      void prevPage().then(refreshContextMenu)
     },
     onNextPage: () => {
-      nextPage()
-      refreshContextMenu()
+      void nextPage().then(refreshContextMenu)
     },
     onSwitchBook: (id) => {
       void switchToBook(id).then(refreshContextMenu)

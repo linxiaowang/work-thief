@@ -305,7 +305,7 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     expect(s.hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
     expect(s.hotkeyNextChapter).toBe('')
     expect(s.hotkeyPrevChapter).toBe('')
-    expect(s.charsPerPage).toBe(40)
+    expect(s.charsPerPage).toBe(20)
     expect(s.watchedFolder).toBeNull()
     expect(s.moyuText).toBe('工作中')
     expect(s.showPageNumber).toBe(true)
@@ -339,7 +339,7 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
   it('resets to defaults', () => {
     updateSettings({ charsPerPage: 60, hotkeyToggleHidden: 'X', moyuText: 'x' })
     resetSettings()
-    expect(getSettings().charsPerPage).toBe(40)
+    expect(getSettings().charsPerPage).toBe(20)
     expect(getSettings().hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
     expect(getSettings().hotkeyNextPage).toBe('CommandOrControl+Alt+.')
     expect(getSettings().moyuText).toBe('工作中')
