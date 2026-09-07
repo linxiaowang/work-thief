@@ -71,14 +71,31 @@ export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
   })
 
   if (currentBook && chapters.length > 1) {
-    const chapterSubmenu: MenuItemConstructorOptions[] = chapters.slice(0, 200).map((c) => ({
+    const chapterItem = (c: (typeof chapters)[number]): MenuItemConstructorOptions => ({
       label: `${c.index + 1}. ${c.title}`,
       type: 'checkbox' as const,
       checked: state?.chapterIndex === c.index,
       click: () => cb.onJumpToChapter(c.index)
-    }))
+    })
+
+    let chapterSubmenu: MenuItemConstructorOptions[]
+    if (chapters.length > 100) {
+      chapterSubmenu = []
+      for (let start = 0; start < chapters.length; start += 100) {
+        const group = chapters.slice(start, start + 100)
+        const from = start + 1
+        const to = start + group.length
+        chapterSubmenu.push({
+          label: `${from}–${to}`,
+          submenu: group.map(chapterItem)
+        })
+      }
+    } else {
+      chapterSubmenu = chapters.map(chapterItem)
+    }
+
     items.push({
-      label: `跳转章节`,
+      label: `跳转章节 (共 ${chapters.length} 章)`,
       submenu: chapterSubmenu
     })
   }
