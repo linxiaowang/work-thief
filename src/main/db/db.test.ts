@@ -308,7 +308,7 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     expect(s.charsPerPage).toBe(20)
     expect(s.watchedFolder).toBeNull()
     expect(s.moyuText).toBe('工作中')
-    expect(s.showPageNumber).toBe(true)
+    expect(s.showPageNumber).toBe(false)
     expect(s.preferredEncoding).toBe('auto')
   })
 
@@ -370,5 +370,59 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     expect(s.hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
     expect(s.hotkeyNextChapter).toBe('')
     expect(s.hotkeyPrevChapter).toBe('')
+  })
+
+  it('one-shot migrates showPageNumber true → false and persists', () => {
+    const d = getDb()
+    d.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)`).run(
+      'app_settings',
+      JSON.stringify({
+        hotkeyNextPage: 'CommandOrControl+Alt+.',
+        hotkeyPrevPage: 'CommandOrControl+Alt+,',
+        hotkeyNextChapter: '',
+        hotkeyPrevChapter: '',
+        hotkeyToggleHidden: 'CommandOrControl+Alt+M',
+        charsPerPage: 40,
+        moyuText: '工作中',
+        showPageNumber: true,
+        preferredEncoding: 'auto',
+        watchedFolder: null
+      })
+    )
+    expect(getSettings().showPageNumber).toBe(false)
+    const flag = d
+      .prepare('SELECT value FROM settings WHERE key = ?')
+      .get('migrated_page_number_off') as { value: string } | undefined
+    expect(flag?.value).toBe('1')
+    const raw = d.prepare('SELECT value FROM settings WHERE key = ?').get('app_settings') as {
+      value: string
+    }
+    expect(JSON.parse(raw.value).showPageNumber).toBe(false)
+  })
+
+  it('does not re-force showPageNumber after migration flag is set', () => {
+    const d = getDb()
+    d.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)`).run(
+      'migrated_page_number_off',
+      '1'
+    )
+    d.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)`).run(
+      'app_settings',
+      JSON.stringify({
+        hotkeyNextPage: 'CommandOrControl+Alt+.',
+        hotkeyPrevPage: 'CommandOrControl+Alt+,',
+        hotkeyNextChapter: '',
+        hotkeyPrevChapter: '',
+        hotkeyToggleHidden: 'CommandOrControl+Alt+M',
+        charsPerPage: 40,
+        moyuText: '工作中',
+        showPageNumber: true,
+        preferredEncoding: 'auto',
+        watchedFolder: null
+      })
+    )
+    expect(getSettings().showPageNumber).toBe(true)
+    updateSettings({ showPageNumber: true })
+    expect(getSettings().showPageNumber).toBe(true)
   })
 })

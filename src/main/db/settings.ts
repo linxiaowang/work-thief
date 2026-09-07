@@ -7,6 +7,8 @@ import {
 } from '@shared/types'
 
 const SETTINGS_KEY = 'app_settings'
+/** One-shot: force showPageNumber off for existing installs; then user preference sticks. */
+const MIGRATED_PAGE_NUMBER_OFF_KEY = 'migrated_page_number_off'
 
 const MIN_CHARS = 20
 const MAX_CHARS = 80
@@ -15,18 +17,52 @@ function defaultSettings(): AppSettings {
   return { ...DEFAULT_APP_SETTINGS, watchedFolder: null }
 }
 
+function upsertSetting(key: string, value: string): void {
+  getDb()
+    .prepare(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    )
+    .run(key, value)
+}
+
+function hasMigrationFlag(key: string): boolean {
+  const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined
+  return Boolean(row)
+}
+
+/**
+ * Existing users may still have showPageNumber: true persisted.
+ * One-shot migrate to false on load; flag prevents re-forcing if they turn it back on.
+ */
+function migratePageNumberOff(settings: AppSettings): AppSettings {
+  if (hasMigrationFlag(MIGRATED_PAGE_NUMBER_OFF_KEY)) return settings
+  upsertSetting(MIGRATED_PAGE_NUMBER_OFF_KEY, '1')
+  if (!settings.showPageNumber) return settings
+  const next: AppSettings = { ...settings, showPageNumber: false }
+  upsertSetting(SETTINGS_KEY, JSON.stringify(next))
+  return next
+}
+
 export function getSettings(): AppSettings {
   const d = getDb()
   const row = d.prepare('SELECT value FROM settings WHERE key = ?').get(SETTINGS_KEY) as
     | { value: string }
     | undefined
-  if (!row) return defaultSettings()
-  try {
-    const parsed = JSON.parse(row.value) as Partial<AppSettings>
-    return mergeWithDefaults(parsed)
-  } catch {
-    return defaultSettings()
+  let settings: AppSettings
+  if (!row) {
+    settings = defaultSettings()
+  } else {
+    try {
+      const parsed = JSON.parse(row.value) as Partial<AppSettings>
+      settings = mergeWithDefaults(parsed)
+    } catch {
+      settings = defaultSettings()
+    }
   }
+  return migratePageNumberOff(settings)
 }
 
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {

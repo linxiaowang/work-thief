@@ -66,7 +66,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   watchedFolder: null,
   charsPerPage: 20,
   moyuText: '工作中',
-  showPageNumber: true,
+  showPageNumber: false,
   preferredEncoding: 'auto'
 }
 

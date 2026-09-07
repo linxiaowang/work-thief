@@ -31,7 +31,7 @@ vi.mock('./db/settings', () => ({
     watchedFolder: null,
     charsPerPage: 20,
     moyuText: '工作中',
-    showPageNumber: true,
+    showPageNumber: false,
     preferredEncoding: 'auto'
   })
 }))
