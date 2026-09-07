@@ -70,7 +70,7 @@ AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber 
 
 1. 启动 → ensureWatchedFolder + resumeWatching → initTray → 最近打开的书 switchToBook
 2. loadBookPages：整书解码 → 按 charsPerPage 全书切页
-3. Tray.setTitle(页正文 [+ ·页码/总页])；硬顶 28 字（空 title 则重试 16）；默认 charsPerPage=20
+3. Tray.setTitle(页正文 [+ ·页码/总页][·完])：先算 suffix，bodyMax=28−suffix（≥10），按 min(charsPerPage, bodyMax) 切页，标题=page+suffix 不再截断正文；完整页信息进 setToolTip；空 title 重试缩短正文；默认 charsPerPage=20
 4. 热键 / 菜单翻页（全书页）；章节跳转可选
 5. Boss Key：小说 ↔ moyu_text 伪装（默认「工作中」；空则 HH:mm；不 blank-only）。Boss 下左键/下一页只揭开伪装不翻页。
 

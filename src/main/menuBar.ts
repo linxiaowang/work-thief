@@ -6,7 +6,14 @@ import { getProgress, upsertProgress } from './db/progress'
 import { getSettings } from './db/settings'
 import { paginate, selectPageForOffset, resolveChapterJumpPageIndex } from './pagination'
 import { normalizeNovelText } from './parsers/normalize'
-import { truncateForMenuBar, MENU_BAR_TITLE_MAX, MENU_BAR_TITLE_RETRY } from './trayTitle'
+import {
+  truncateForMenuBar,
+  MENU_BAR_TITLE_MAX,
+  MENU_BAR_TITLE_RETRY,
+  buildPageSuffix,
+  composeReadingTitle,
+  resolveEffectiveCharsPerPage
+} from './trayTitle'
 
 /**
  * MenuBar — owns the macOS menu bar item and all reading state.
@@ -176,16 +183,15 @@ export function render(): void {
     return
   }
   const settings = getSettings()
-  let title = page
-  if (settings.showPageNumber && cachedPages.length > 0) {
-    // Short suffix so body stays visible under the 28-char hard cap.
-    title = `${page}·${state.pageIndex + 1}/${cachedPages.length}`
-  }
-  // Last page: stop (no wrap) + optional 「·完」 suffix.
-  if (cachedPages.length > 0 && state.pageIndex >= cachedPages.length - 1) {
-    title = `${title}·完`
-  }
-  setTrayTitle(title)
+  const total = cachedPages.length
+  const isLast = total > 0 && state.pageIndex >= total - 1
+  // Suffix first — page was already sliced to fit bodyMax; never trim page.
+  const suffix = buildPageSuffix(state.pageIndex, total, {
+    showPageNumber: settings.showPageNumber,
+    isLast
+  })
+  const title = composeReadingTitle(page, suffix)
+  setReadingTrayTitle(page, suffix, title)
 }
 
 /** Boss disguise: custom moyu_text, or current HH:mm when empty. */
@@ -236,7 +242,8 @@ export async function refreshChaptersFromFile(bookId: number): Promise<void> {
 export async function loadBookPages(): Promise<void> {
   if (!state || state.bookId < 0) return
   const settings = getSettings()
-  const key = `${state.bookId}:${settings.charsPerPage}:${settings.preferredEncoding}`
+  // Include showPageNumber — it changes suffix length → effective bodyMax.
+  const key = `${state.bookId}:${settings.charsPerPage}:${settings.preferredEncoding}:${settings.showPageNumber}`
   if (cachedBookKey === key && cachedPages.length > 0) return
 
   const book = getBook(state.bookId)
@@ -249,7 +256,13 @@ export async function loadBookPages(): Promise<void> {
 
   // Thief-style reading string (collapsed whitespace) — same as import offsets + paginate.
   cachedBookText = normalizeNovelText(text)
-  cachedPages = paginate(cachedBookText, settings.charsPerPage)
+  const effectiveChars = resolveEffectiveCharsPerPage(
+    cachedBookText.length,
+    settings.charsPerPage,
+    settings.showPageNumber
+  )
+  // Slice length = min(settings.charsPerPage, bodyMax) so what we page is what we show.
+  cachedPages = paginate(cachedBookText, effectiveChars)
   cachedBookKey = key
 
   if (state.pageIndex >= cachedPages.length) {
@@ -385,10 +398,16 @@ export async function jumpToChapter(chapterIndex: number): Promise<void> {
     if ((c.title?.trim() ?? '') === title) occurrence++
   }
 
+  // Must match loadBookPages effective slice length (suffix-aware bodyMax).
+  const effectiveChars = resolveEffectiveCharsPerPage(
+    cachedBookText.length,
+    settings.charsPerPage,
+    settings.showPageNumber
+  )
   const pageIndex = resolveChapterJumpPageIndex(
     cachedBookText,
     chapter,
-    settings.charsPerPage,
+    effectiveChars,
     occurrence
   )
   if (pageIndex == null || cachedPages[pageIndex] == null) {
@@ -539,7 +558,7 @@ function persistProgress(): void {
   upsertProgress(state.bookId, state.chapterIndex, fraction)
 }
 
-/** setTitle with empty-getTitle retry at 16 chars. */
+/** setTitle with empty-getTitle retry at 16 chars (hints / errors / disguise). */
 function setTrayTitle(text: string): void {
   if (!tray) return
   const primary = truncateForMenuBar(text, MENU_BAR_TITLE_MAX)
@@ -559,14 +578,59 @@ function setTrayTitle(text: string): void {
   }
 }
 
+/**
+ * Reading title: page was sized to fit with suffix — NEVER trim page after slicing.
+ * Full page + page# go to tooltip (menu bar may still clip visually on crowded bars).
+ */
+function setReadingTrayTitle(page: string, suffix: string, title: string): void {
+  if (!tray) return
+  // Guarantee: page.length + suffix.length ≤ MAX (enforced by effective chars).
+  tray.setTitle(title)
+  const totalHint =
+    state && cachedPages.length > 0
+      ? `${state.pageIndex + 1}/${cachedPages.length}`
+      : ''
+  const tip = totalHint ? `${page}  (${totalHint})` : page
+  try {
+    tray.setToolTip(tip)
+  } catch {
+    // ignore
+  }
+  let shown = ''
+  try {
+    shown = tray.getTitle() ?? ''
+  } catch {
+    shown = ''
+  }
+  if (!shown) {
+    // Rare macOS quirk: shrink body further but still keep full suffix, no mid-trim ellipsis.
+    const retryBodyMax = Math.max(10, MENU_BAR_TITLE_RETRY - suffix.length)
+    const retryPage = page.slice(0, retryBodyMax)
+    const retryTitle = composeReadingTitle(retryPage, suffix)
+    console.warn(
+      '[WorkThief] tray getTitle() empty after reading setTitle; retrying shorter body',
+      JSON.stringify(retryTitle)
+    )
+    tray.setTitle(retryTitle)
+  }
+}
+
 export const _internals = {
   PERSIST_DEBOUNCE_MS,
   NEXT_PAGE_DEBOUNCE_MS,
   EMPTY_HINT,
   MENU_BAR_TITLE_MAX,
   MENU_BAR_TITLE_RETRY,
-  setTrayTitle
+  setTrayTitle,
+  setReadingTrayTitle
 }
 
-export { truncateForMenuBar, MENU_BAR_TITLE_MAX, MENU_BAR_TITLE_RETRY } from './trayTitle'
+export {
+  truncateForMenuBar,
+  MENU_BAR_TITLE_MAX,
+  MENU_BAR_TITLE_RETRY,
+  buildPageSuffix,
+  composeReadingTitle,
+  resolveEffectiveCharsPerPage
+} from './trayTitle'
 
