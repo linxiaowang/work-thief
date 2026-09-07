@@ -1,24 +1,57 @@
-import Database from 'better-sqlite3'
+import { createRequire } from 'node:module'
+import type BetterSqlite3 from 'better-sqlite3'
 import { app } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 
-let db: Database.Database | null = null
+type DatabaseInstance = BetterSqlite3.Database
 
-export function getDb(): Database.Database {
+let db: DatabaseInstance | null = null
+const nodeRequire = createRequire(import.meta.url)
+
+function wrapDbLoadError(err: unknown): Error {
+  const raw = err instanceof Error ? err.message : String(err)
+  const arch = /incompatible architecture|x86_64|arm64/i.test(raw)
+  const hint = arch
+    ? ' Arch mismatch (x86_64 vs arm64). Rebuild native modules for Electron on Apple Silicon.'
+    : ' Rebuild native modules for the installed Electron.'
+  return new Error('[WorkThief] DB native load failed: ' + raw + '.' + hint, {
+    cause: err
+  })
+}
+
+function loadBetterSqlite3(): typeof BetterSqlite3 {
+  try {
+    return nodeRequire('better-sqlite3') as typeof BetterSqlite3
+  } catch (err) {
+    throw wrapDbLoadError(err)
+  }
+}
+
+export function getDb(): DatabaseInstance {
   if (db) return db
+  const Database = loadBetterSqlite3()
   const dbPath = getDbPath()
   mkdirSync(dirname(dbPath), { recursive: true })
-  db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  migrate(db)
+  try {
+    db = new Database(dbPath)
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
+    migrate(db)
+  } catch (err) {
+    db = null
+    throw wrapDbLoadError(err)
+  }
   return db
 }
 
 export function closeDb(): void {
   if (db) {
-    db.close()
+    try {
+      db.close()
+    } catch {
+      /* ignore */
+    }
     db = null
   }
 }
@@ -31,7 +64,7 @@ function getDbPath(): string {
   return join(userData, 'library.db')
 }
 
-function migrate(d: Database.Database): void {
+function migrate(d: DatabaseInstance): void {
   d.exec(`
     CREATE TABLE IF NOT EXISTS books (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +111,7 @@ function migrate(d: Database.Database): void {
 }
 
 /** Test seam: swap the singleton DB (e.g. :memory:). */
-export function _setDbForTesting(customDb: Database.Database | null): void {
+export function _setDbForTesting(customDb: DatabaseInstance | null): void {
   if (db) {
     try {
       db.close()

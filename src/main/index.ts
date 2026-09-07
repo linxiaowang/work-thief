@@ -91,6 +91,7 @@ app.whenReady().then(async () => {
     refreshContextMenu()
   } catch (err) {
     console.error('[WorkThief] startup after tray failed:', err)
+    notifyDbOrStartupFailure(err)
     try {
       refreshContextMenu()
     } catch (menuErr) {
@@ -118,6 +119,29 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   unregisterAllShortcuts()
 })
+
+
+function notifyDbOrStartupFailure(err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err)
+  const arch = /incompatible architecture|x86_64|arm64|better-sqlite3|native/i.test(msg)
+  console.error(
+    '[WorkThief] SQLite unavailable — tray stays up (degraded).' +
+      (arch
+        ? ' Likely native arch mismatch (x86_64 vs arm64). See README Native modules section.'
+        : ' See console / README.')
+  )
+  if (!Notification.isSupported()) return
+  try {
+    new Notification({
+      title: 'WorkThief: 数据库加载失败',
+      body: arch
+        ? 'Native DB module arch mismatch. Tray still running; fix via README (setup / rebuild).'
+        : 'DB failed at startup; tray still running. See console.'
+    }).show()
+  } catch (notifyErr) {
+    console.error('[WorkThief] failure Notification failed:', notifyErr)
+  }
+}
 
 function notifyStarted(): void {
   if (!Notification.isSupported()) {

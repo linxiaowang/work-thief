@@ -13,6 +13,8 @@ Packaged hides Dock. Dev shows Dock.
 ## Install
 Need: macOS Node 20+
 
+On Apple Silicon after clone/pull, see **Native modules** (setup / rebuild if arch mismatches).
+
 ## Verify steps
 
 1. Launch; menu bar RIGHT title (empty shelf hint).
@@ -60,6 +62,23 @@ Chapter jump is **menu only** (no chapter hotkeys by default).
 ## Watcher bonus
 
 Still watches Documents/WorkThief. First-run uses file picker, not only the watcher.
+
+## Native modules (Apple Silicon)
+
+`better-sqlite3` must match **Electron's** arch, not only Node's.
+
+**Symptom:** after clone/pull on an arm64 Mac, DB fails or Electron reports:
+`mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64')`
+(or the reverse). Often caused by x86_64 Node/Rosetta producing the wrong `.node` binary.
+
+**After clone or pull on arm64 Mac:**
+
+1. Confirm arm64 Node: `node -p process.arch` (expect `arm64`)
+2. `pnpm install` (postinstall runs setup; soft-fails with a console hint if rebuild fails)
+3. If DB still fails: `pnpm setup` or `pnpm rebuild`
+4. Still broken: remove `node_modules`, then `pnpm install` and `pnpm setup` again
+
+`pnpm setup` downloads Electron if needed, then `electron-builder install-app-deps` (fallback: `electron-rebuild`) so `better-sqlite3` matches Electron. `pnpm rebuild` is the native-only path.
 
 ## Limits
 
