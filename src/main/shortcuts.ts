@@ -1,6 +1,6 @@
 import { globalShortcut, Notification } from 'electron'
 import { getSettings } from './db/settings'
-import { nextPage, prevPage, toggleHidden, getTray } from './menuBar'
+import { nextPage, prevPage, toggleHidden } from './menuBar'
 
 /**
  * Global hotkeys for the menu-bar reader (Thief-style defaults).
@@ -70,10 +70,7 @@ export function applyShortcuts(): { ok: boolean; failures: string[] } {
 }
 
 function notifyShortcutFailure(failures: string[]): void {
-  const tray = getTray()
-  if (tray) {
-    tray.setTitle(ACCESSIBILITY_HINT)
-  }
+  // Notification only — never overwrite novel tray title with the accessibility hint.
   if (!Notification.isSupported()) {
     console.warn('[WorkThief] shortcut register failed:', failures.join('; '))
     return

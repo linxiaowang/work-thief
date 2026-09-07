@@ -48,7 +48,7 @@ export interface AppSettings {
   watchedFolder: string | null
   /** Characters shown per menu-bar "page" (Thief page_size). */
   charsPerPage: number
-  /** Boss Key disguise text (Thief moyu_text). Empty → show current HH:mm. */
+  /** Boss Key disguise text (Thief moyu_text). Default 「工作中」; empty → show current HH:mm. */
   moyuText: string
   /** Append " N/total" after page body when true. */
   showPageNumber: boolean
@@ -65,7 +65,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkeyToggleHidden: 'CommandOrControl+Alt+M',
   watchedFolder: null,
   charsPerPage: 40,
-  moyuText: 'Hello',
+  moyuText: '工作中',
   showPageNumber: true,
   preferredEncoding: 'auto'
 }

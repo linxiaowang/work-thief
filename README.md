@@ -20,7 +20,7 @@ Need: macOS Node 20+
 3. Menu bar shows novel text (optional page/total).
 4. Left-click pages immediately; right-click opens menu.
 5. Hotkeys: ⌘⌥. next / ⌘⌥, prev / ⌘⌥M Boss (macOS; CommandOrControl+Alt).
-6. Boss: title becomes disguise (default Hello); toggle back. Never blank-only.
+6. Boss: title becomes disguise (default 「工作中」); toggle back. Never blank-only.
 7. Settings: path, page_size, encoding auto/UTF-8/GBK, moyu_text, show page#, **current shortcut copy**.
 
 Tray sits on the RIGHT near the clock.

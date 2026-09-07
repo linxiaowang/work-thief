@@ -40,7 +40,7 @@ Electron Main only
 | index.ts | 单实例、隐藏 Dock、启动顺序、右键 popUpContextMenu |
 | menuBar.ts | Tray、阅读状态、分页缓存、进度持久化、Boss Key |
 | menuBuilder.ts | 右键菜单模板 |
-| pagination.ts | 按 charsPerPage 切页，优先句号/段落 |
+| pagination.ts | Thief 定长切页（先折叠空白，再 slice，页内不 trim） |
 | shortcuts.ts | 注册/注销全局热键 |
 | watcher.ts | 默认监听文件夹，.txt add/change → 导入 |
 | ipc.ts | 仅 importPaths / refreshMissingFlags（给 watcher，非 renderer IPC） |
@@ -72,7 +72,7 @@ AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber 
 2. loadBookPages：整书解码 → 按 charsPerPage 全书切页
 3. Tray.setTitle(页正文 [+ 页码/总页])；过长约 80 字截断
 4. 热键 / 菜单翻页（全书页）；章节跳转可选
-5. Boss Key：小说 ↔ moyu_text 伪装（不 blank-only）
+5. Boss Key：小说 ↔ moyu_text 伪装（默认「工作中」；空则 HH:mm；不 blank-only）。Boss 下左键/下一页只揭开伪装不翻页。
 
 空书架：WorkThief · 选 txt；文件选择器选书。
 
@@ -96,11 +96,11 @@ AppSettings：热键 + watchedFolder + charsPerPage + moyuText + showPageNumber 
 
 章节跳转仅右键菜单（默认不注册翻章热键）。
 
-macOS 需辅助功能权限；注册失败时 Notification + 托盘标题提示「开 系统设置→隐私→辅助功能」。
+macOS 需辅助功能权限；注册失败时仅 Notification（不覆盖托盘小说标题）。
 
 托盘：左键翻页 / 无书选文件；右键 popUpContextMenu。禁止 setContextMenu（会抢走左键）。
 
-翻页热路径：pages 常驻内存；next/prev 只改 pageIndex + setTitle；persistProgress 防抖 800ms；末页停止不回绕，标题可带「·完」。
+翻页热路径：pages 常驻内存；next/prev 只改 pageIndex + setTitle；persistProgress 防抖 800ms；左键 nextPage 防抖 80ms；末页停止不回绕，标题可带「·完」。全书先折叠空白再定长切片，相邻页拼接连续。
 
 ---
 

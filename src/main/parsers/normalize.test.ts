@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeNovelText } from './normalize'
+import { normalizeLineEndings, normalizeNovelText } from './normalize'
 import { detectChapters } from './chapters'
 import { parseTxtText } from './txt'
-import { paginate, resolveChapterJumpPageIndex } from '../pagination'
+import { paginate, resolveChapterJumpPageIndex, readingTextOf } from '../pagination'
+
+describe('normalizeLineEndings', () => {
+  it('converts CRLF and lone CR to LF only', () => {
+    expect(normalizeLineEndings('a\r\nb\rc')).toBe('a\nb\nc')
+  })
+})
 
 describe('normalizeNovelText', () => {
-  it('converts CRLF and lone CR to LF only', () => {
-    expect(normalizeNovelText('a\r\nb\rc')).toBe('a\nb\nc')
-  })
-
-  it('does not collapse newlines to spaces', () => {
-    expect(normalizeNovelText('第一章\n正文')).toBe('第一章\n正文')
+  it('collapses newlines to spaces and trims once', () => {
+    expect(normalizeNovelText('第一章\n正文')).toBe('第一章 正文')
+    expect(normalizeNovelText('  a  \n\n  b  ')).toBe('a b')
   })
 })
 
@@ -38,7 +41,7 @@ describe('chapter jump with shared normalization', () => {
 
   it('jump to 第二章 lands on that chapter opening', () => {
     const parsed = parseTxtText(sampleCrlf, '测试')
-    const reading = normalizeNovelText(sampleCrlf)
+    const reading = readingTextOf(sampleCrlf)
     const pages = paginate(reading, 40)
     expect(pages.length).toBeGreaterThan(0)
 
@@ -47,18 +50,16 @@ describe('chapter jump with shared normalization', () => {
     expect(pageIndex).not.toBeNull()
     const page = pages[pageIndex!]
     expect(page).toContain('第二章')
-    // Opening text of chapter 2 should be on this page (or title at least).
     expect(page.includes('继续') || page.includes('开场白') || page.includes('第二章')).toBe(
       true
     )
   })
 
   it('title fallback works when startOffset is wrong (legacy misaligned)', () => {
-    const reading = normalizeNovelText(sampleCrlf)
+    const reading = readingTextOf(sampleCrlf)
     const pages = paginate(reading, 40)
-    const chapters = detectChapters(reading)
+    const chapters = detectChapters(normalizeLineEndings(sampleCrlf))
     const ch2 = chapters.find((c) => c.title.includes('第二章'))!
-    // Simulate legacy bad offset far from real title
     const bad = { startOffset: 0, title: ch2.title }
     const pageIndex = resolveChapterJumpPageIndex(pages, reading, bad)
     expect(pageIndex).not.toBeNull()

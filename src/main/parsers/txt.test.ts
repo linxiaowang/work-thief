@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseTxtText, coverColorFor } from './txt'
+import { normalizeNovelText } from './normalize'
 
 describe('parseTxtText', () => {
   it('parses a minimal novel', () => {
@@ -17,7 +18,7 @@ describe('parseTxtText', () => {
 
     const result = parseTxtText(text, '三体', 'utf-8', text.length)
     expect(result.title).toBe('三体')
-    expect(result.totalChars).toBe(text.length)
+    expect(result.totalChars).toBe(normalizeNovelText(text).length)
     expect(result.chapters.length).toBeGreaterThanOrEqual(2)
     expect(result.chapters[0].title).toBe('第一章 太阳系')
     expect(result.chapters[1].title).toBe('第二章 三体')

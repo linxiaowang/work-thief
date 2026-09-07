@@ -1,64 +1,34 @@
 /**
- * Pagination — split chapter text into menu-bar-sized pages.
+ * Pagination — Thief-style fixed windows over a normalized book string.
  *
- * Default ~40 chars; prefer sentence / paragraph breaks.
+ * Normalize whole book first (newlines→spaces, collapse whitespace),
+ * then slice with no overlap and no per-page trim.
  */
+
+import { normalizeNovelText } from './parsers/normalize'
 
 const DEFAULT_CHARS_PER_PAGE = 40
 
 export function paginate(text: string, maxChars: number = DEFAULT_CHARS_PER_PAGE): string[] {
   const limit = Math.max(10, maxChars)
-  const normalized = text
-    .replace(/\r\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+  const normalized = normalizeNovelText(text)
 
   if (!normalized) return []
-  if (normalized.length <= limit) return [normalized]
 
   const pages: string[] = []
-  let cursor = 0
-
-  while (cursor < normalized.length) {
-    const remaining = normalized.slice(cursor)
-    if (remaining.length <= limit) {
-      pages.push(remaining)
-      break
-    }
-
-    const window = remaining.slice(0, limit)
-    let breakAt = window.lastIndexOf('\n\n')
-    if (breakAt < 0) breakAt = findLastSentenceEnd(window)
-    if (breakAt < 0) breakAt = window.lastIndexOf('\n')
-    if (breakAt < 0) breakAt = findLastWhitespace(window)
-    if (breakAt <= 0) breakAt = limit
-
-    const page = normalized.slice(cursor, cursor + breakAt).trim()
-    if (page) pages.push(page)
-    cursor += breakAt
-    while (normalized[cursor] === '\n' || normalized[cursor] === ' ') cursor++
+  for (let i = 0; i < normalized.length; i += limit) {
+    // Fixed window: no overlap, never trim individual pages.
+    pages.push(normalized.slice(i, i + limit))
   }
-
   return pages
 }
 
-function findLastSentenceEnd(window: string): number {
-  let best = -1
-  for (const ch of ['。', '！', '？', '. ', '! ', '? ']) {
-    const idx = window.lastIndexOf(ch)
-    if (idx > best) best = idx + ch.length
-  }
-  return best
+/** The normalized reading string that paginate slices (pages.join('') === this). */
+export function readingTextOf(text: string): string {
+  return normalizeNovelText(text)
 }
 
-function findLastWhitespace(window: string): number {
-  for (let i = window.length - 1; i >= 0; i--) {
-    if (/\s/.test(window[i])) return i
-  }
-  return -1
-}
-
-/** Pick the page whose start is nearest to approxOffset (char offset in chapter). */
+/** Pick the page whose start is nearest to approxOffset (char offset in reading text). */
 export function selectPageForOffset(
   pages: string[],
   approxOffset: number

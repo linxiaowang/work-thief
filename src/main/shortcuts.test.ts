@@ -30,7 +30,7 @@ vi.mock('./db/settings', () => ({
     hotkeyToggleHidden: 'CommandOrControl+Alt+M',
     watchedFolder: null,
     charsPerPage: 40,
-    moyuText: 'Hello',
+    moyuText: '工作中',
     showPageNumber: true,
     preferredEncoding: 'auto'
   })
@@ -39,8 +39,7 @@ vi.mock('./db/settings', () => ({
 vi.mock('./menuBar', () => ({
   nextPage: vi.fn(),
   prevPage: vi.fn(),
-  toggleHidden: vi.fn(),
-  getTray: () => ({ setTitle: vi.fn() })
+  toggleHidden: vi.fn()
 }))
 
 const { applyShortcuts, formatShortcutCopy, _internals } = await import('./shortcuts')
@@ -71,7 +70,7 @@ describe('shortcuts', () => {
     ])
   })
 
-  it('notifies and returns failures when register fails', () => {
+  it('notifies and returns failures when register fails (no tray overwrite)', () => {
     register.mockReturnValue(false)
     const result = applyShortcuts()
     expect(result.ok).toBe(false)

@@ -1,7 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { decodeBuffer, decodeWithPreference, type Encoding } from './encoding'
 import { detectChapters, sliceChapters } from './chapters'
-import { normalizeNovelText } from './normalize'
+import { normalizeLineEndings, normalizeNovelText } from './normalize'
 import type { PreferredEncoding } from '@shared/types'
 
 export interface ParsedBook {
@@ -37,8 +37,10 @@ export async function parseTxtFile(
 
 /**
  * Parse already-decoded text. Useful for tests and in-memory rewrites.
- * Normalizes line endings before chapter detection so startOffset matches
- * the reading string used by loadBookPages.
+ *
+ * Chapter headings are detected on line-ending-normalized text (needs newlines).
+ * Offsets / totalChars are remapped onto the Thief-style reading string
+ * (newlines→spaces, collapsed whitespace) so they match loadBookPages + paginate.
  */
 export function parseTxtText(
   text: string,
@@ -46,10 +48,12 @@ export function parseTxtText(
   encoding: Encoding = 'utf-8',
   _fileSize: number = text.length
 ): ParsedBook {
-  const normalized = normalizeNovelText(text)
-  const detected = detectChapters(normalized)
-  const slices = sliceChapters(normalized, detected)
-  const chapters = detected.map((c, i) => ({
+  const lineNorm = normalizeLineEndings(text)
+  const detected = detectChapters(lineNorm)
+  const reading = normalizeNovelText(lineNorm)
+  const remapped = remapChapterOffsets(detected, lineNorm, reading)
+  const slices = sliceChapters(reading, remapped)
+  const chapters = remapped.map((c, i) => ({
     index: i,
     title: c.title,
     content: slices[i].content,
@@ -60,9 +64,34 @@ export function parseTxtText(
   return {
     title,
     encoding,
-    totalChars: normalized.length,
+    totalChars: reading.length,
     chapters
   }
+}
+
+/** Map chapter offsets from line-normalized text into the collapsed reading string. */
+function remapChapterOffsets(
+  detected: Array<{ index: number; title: string; startOffset: number }>,
+  lineNorm: string,
+  reading: string
+): Array<{ index: number; title: string; startOffset: number }> {
+  let searchFrom = 0
+  return detected.map((c) => {
+    const title = c.title?.trim() ?? ''
+    let startOffset = 0
+    if (title) {
+      let idx = reading.indexOf(title, searchFrom)
+      if (idx < 0) idx = reading.indexOf(title)
+      if (idx >= 0) {
+        startOffset = idx
+        searchFrom = idx + Math.max(1, title.length)
+      } else {
+        const ratio = c.startOffset / Math.max(1, lineNorm.length)
+        startOffset = Math.min(Math.round(ratio * reading.length), reading.length)
+      }
+    }
+    return { index: c.index, title: c.title, startOffset }
+  })
 }
 
 function deriveTitleFromPath(filePath: string): string {

@@ -31,6 +31,8 @@ export interface MenuBarState {
 const EMPTY_HINT = 'WorkThief · 选 txt'
 
 const PERSIST_DEBOUNCE_MS = 800
+/** Left-click / nextPage debounce so one physical click ≠ two page turns. */
+const NEXT_PAGE_DEBOUNCE_MS = 80
 
 /**
  * 16×16 teal/orange book + white W — non-template color fallback.
@@ -46,6 +48,7 @@ let cachedBookKey: string | null = null
 let onNeedChooseNovel: (() => void) | null = null
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let onRightClickMenu: (() => void) | null = null
+let lastNextPageAt = 0
 
 export function getTray(): Tray | null {
   return tray
@@ -208,7 +211,7 @@ export async function loadBookPages(): Promise<void> {
   const { decodeWithPreference } = await import('./parsers/encoding')
   const { text } = decodeWithPreference(buf, settings.preferredEncoding)
 
-  // Same normalization as import-time detectChapters — keep newlines so offsets align.
+  // Thief-style reading string (collapsed whitespace) — same as import offsets + paginate.
   cachedBookText = normalizeNovelText(text)
   cachedPages = paginate(cachedBookText, settings.charsPerPage)
   cachedBookKey = key
@@ -243,13 +246,19 @@ export async function reloadPagination(): Promise<void> {
  */
 export function nextPage(): void {
   if (!state) return
+  const now = Date.now()
+  if (now - lastNextPageAt < NEXT_PAGE_DEBOUNCE_MS) return
+  lastNextPageAt = now
+
   if (state.bookId < 0) {
     onNeedChooseNovel?.()
     return
   }
-  // Leaving boss mode on page turn (Thief-style: paging shows novel again).
+  // Boss disguise: left-click / nextPage only exits disguise — do NOT advance page.
   if (state.hidden) {
     state.hidden = false
+    render()
+    return
   }
   if (cachedPages.length === 0) return
   if (state.pageIndex < cachedPages.length - 1) {
@@ -267,8 +276,11 @@ export function prevPage(): void {
     onNeedChooseNovel?.()
     return
   }
+  // Boss disguise: exit only — do not change pageIndex.
   if (state.hidden) {
     state.hidden = false
+    render()
+    return
   }
   if (cachedPages.length === 0) return
   if (state.pageIndex > 0) {
@@ -440,10 +452,10 @@ function persistProgress(): void {
 }
 
 function truncateForMenuBar(text: string): string {
-  // Collapse newlines at display time only — reading string keeps them for offsets.
+  // Display only — pages are already collapsed; still flatten disguise / legacy newlines.
   const oneLine = text.replace(/\s*\n\s*/g, ' ').replace(/　+/g, ' ').trim()
   if (oneLine.length <= 80) return oneLine
   return oneLine.slice(0, 77) + '…'
 }
 
-export const _internals = { PERSIST_DEBOUNCE_MS, EMPTY_HINT }
+export const _internals = { PERSIST_DEBOUNCE_MS, NEXT_PAGE_DEBOUNCE_MS, EMPTY_HINT }

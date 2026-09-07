@@ -307,7 +307,7 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     expect(s.hotkeyPrevChapter).toBe('')
     expect(s.charsPerPage).toBe(40)
     expect(s.watchedFolder).toBeNull()
-    expect(s.moyuText).toBe('Hello')
+    expect(s.moyuText).toBe('工作中')
     expect(s.showPageNumber).toBe(true)
     expect(s.preferredEncoding).toBe('auto')
   })
@@ -342,7 +342,7 @@ describe.skipIf(!nativeAvailable)('settings repo', () => {
     expect(getSettings().charsPerPage).toBe(40)
     expect(getSettings().hotkeyToggleHidden).toBe('CommandOrControl+Alt+M')
     expect(getSettings().hotkeyNextPage).toBe('CommandOrControl+Alt+.')
-    expect(getSettings().moyuText).toBe('Hello')
+    expect(getSettings().moyuText).toBe('工作中')
   })
 
   it('migrates legacy hotkey defaults to Thief-style', () => {
