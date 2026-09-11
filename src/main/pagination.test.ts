@@ -4,8 +4,14 @@ import {
   selectPageForOffset,
   readingTextOf,
   resolveChapterJumpPageIndex,
+  resolveChapterStartOffset,
+  isBlankPage,
+  findNonEmptyPageIndex,
   _internals
 } from './pagination'
+import { parseTxtText } from './parsers/txt'
+import { resolveEffectiveCharsPerPage, truncateForMenuBar, composeReadingTitle, buildPageSuffix } from './trayTitle'
+import { normalizeLineEndings } from './parsers/normalize'
 
 describe('paginate', () => {
   it('returns empty for blank text', () => {
@@ -86,13 +92,46 @@ describe('selectPageForOffset', () => {
   })
 })
 
+describe('isBlankPage / findNonEmptyPageIndex', () => {
+  it('detects whitespace and newline-only pages', () => {
+    expect(isBlankPage('')).toBe(true)
+    expect(isBlankPage('   ')).toBe(true)
+    expect(isBlankPage('\n\n\n')).toBe(true)
+    expect(isBlankPage('\n  \n')).toBe(true)
+    expect(isBlankPage(null)).toBe(true)
+    expect(isBlankPage('第1章')).toBe(false)
+    expect(isBlankPage(' a ')).toBe(false)
+  })
+
+  it('skips blank pages forward and backward', () => {
+    const pages = ['甲乙', '\n\n\n\n', '   ', '丙丁', '']
+    expect(findNonEmptyPageIndex(pages, 1, 1)).toBe(3)
+    expect(findNonEmptyPageIndex(pages, 2, 1)).toBe(3)
+    expect(findNonEmptyPageIndex(pages, 4, -1)).toBe(3)
+    expect(findNonEmptyPageIndex(pages, 1, -1)).toBe(0)
+  })
+})
+
 describe('resolveChapterJumpPageIndex', () => {
-  it('uses title location and floor(idx/charsPerPage); ignores startOffset', () => {
+  it('uses title location and floor(idx/charsPerPage); ignores bad startOffset', () => {
     const reading = '前言。第一章 开始。正文甲。第二章 继续。正文乙。'
     const idx = reading.indexOf('第二章')
     expect(idx).toBeGreaterThan(0)
-    const pageIndex = resolveChapterJumpPageIndex(reading, { title: '第二章 继续' }, 20)
+    const pageIndex = resolveChapterJumpPageIndex(reading, { title: '第二章 继续', startOffset: 99999 }, 20)
     expect(pageIndex).toBe(Math.floor(idx / 20))
+  })
+
+  it('prefers validated startOffset over an earlier title false-match', () => {
+    // Body mentions the later chapter title before the real heading.
+    const reading = '详见第二章 继续。前言。第一章 开始。正文。第二章 继续。后文。'
+    const real = reading.lastIndexOf('第二章 继续')
+    const pageIndex = resolveChapterJumpPageIndex(
+      reading,
+      { title: '第二章 继续', startOffset: real },
+      10
+    )
+    expect(pageIndex).toBe(Math.floor(real / 10))
+    expect(resolveChapterStartOffset(reading, { title: '第二章 继续', startOffset: real })).toBe(real)
   })
 
   it('supports nth occurrence of the same title', () => {
@@ -109,5 +148,99 @@ describe('resolveChapterJumpPageIndex', () => {
     expect(
       resolveChapterJumpPageIndex('没有任何章节标题的正文。', { title: '不存在的章节' }, 20)
     ).toBeNull()
+  })
+
+  it('with pages: uses selectPageForOffset and skips blank windows after jump', () => {
+    const pages = ['前文前文前文前文', '\n\n\n\n\n\n\n\n', '   ', '第9章 标题续', '正文正文正文正文']
+    // Offset into the blank region that precedes the chapter title page.
+    const text = pages.join('')
+    const titleAt = text.indexOf('第9章 标题续')
+    const pageIndex = resolveChapterJumpPageIndex(
+      text,
+      { title: '第9章 标题续', startOffset: titleAt },
+      10,
+      0,
+      pages
+    )
+    expect(pageIndex).toBe(3)
+    expect(isBlankPage(pages[pageIndex!])).toBe(false)
+  })
+})
+
+describe('long book jump ~1000+ then next pages (Shawn repro)', () => {
+  it('recalculates page from chapter first char; never yields blank tray titles on next', () => {
+    const parts: string[] = []
+    for (let i = 1; i <= 1200; i++) {
+      // Heavy newline padding between title and body — blank windows if sliced raw.
+      parts.push(`第${i}章 标题${i}\n` + '\n'.repeat(25) + ('正文内容'.repeat(25)) + '\n')
+    }
+    const raw = '前言前言\n\n' + parts.join('\n')
+    const parsed = parseTxtText(raw, 'long')
+    expect(parsed.chapters.length).toBeGreaterThanOrEqual(1000)
+
+    const reading = readingTextOf(raw)
+    const effective = resolveEffectiveCharsPerPage(reading.length, 20, false)
+    const pages = paginate(reading, effective)
+
+    const ch = parsed.chapters[999] // chapter 1000
+    const offset = resolveChapterStartOffset(reading, ch, 0)
+    expect(offset).toBe(ch.startOffset)
+    expect(reading.startsWith(ch.title.trim(), offset!)).toBe(true)
+
+    const pageIndex = resolveChapterJumpPageIndex(reading, ch, effective, 0, pages)
+    expect(pageIndex).not.toBeNull()
+    // Must not keep a stale early pageIndex — landed near chapter 1000 offset.
+    expect(pageIndex!).toBe(selectPageForOffset(pages, offset!).pageIndex)
+    expect(isBlankPage(pages[pageIndex!])).toBe(false)
+
+    // Simulate next-page × 5 — tray titles must stay non-empty.
+    let idx = pageIndex!
+    for (let step = 0; step < 5; step++) {
+      if (idx < pages.length - 1) {
+        idx += 1
+        idx = findNonEmptyPageIndex(pages, idx, 1)
+      }
+      const page = pages[idx]
+      expect(isBlankPage(page)).toBe(false)
+      const suffix = buildPageSuffix(idx, pages.length, { showPageNumber: false, isLast: false })
+      const title = composeReadingTitle(page, suffix)
+      expect(title.replace(/\s+/g, '').length).toBeGreaterThan(0)
+      expect(truncateForMenuBar(title).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('raw newline windows after chapter jump: next-page auto-skips blanks (never empty title)', () => {
+    // Reproduce empty-tray path when paging keeps newline runs (pre-collapse / mixed).
+    const parts: string[] = []
+    for (let i = 1; i <= 80; i++) {
+      parts.push(`第${i}章 标题\n` + '\n'.repeat(40) + ('哈'.repeat(40)) + '\n')
+    }
+    const raw = normalizeLineEndings(parts.join('\n'))
+    const limit = 20
+    const pages: string[] = []
+    for (let i = 0; i < raw.length; i += limit) {
+      pages.push(raw.slice(i, i + limit))
+    }
+    expect(pages.some((p) => isBlankPage(p))).toBe(true)
+
+    const title = '第40章 标题'
+    const offset = raw.indexOf(title)
+    expect(offset).toBeGreaterThan(0)
+    let pageIndex = resolveChapterJumpPageIndex(raw, { title, startOffset: offset }, limit, 0, pages)!
+    expect(isBlankPage(pages[pageIndex])).toBe(false)
+
+    // Old bug: naive ++ landed on newline-only page → truncateForMenuBar → ''.
+    const naiveNext = pages[pageIndex + 1]
+    expect(isBlankPage(naiveNext)).toBe(true)
+    expect(truncateForMenuBar(naiveNext)).toBe('')
+
+    // Fixed: auto-advance skips blanks.
+    pageIndex = findNonEmptyPageIndex(pages, pageIndex + 1, 1)
+    expect(isBlankPage(pages[pageIndex])).toBe(false)
+    const titleOut = composeReadingTitle(
+      pages[pageIndex],
+      buildPageSuffix(pageIndex, pages.length, { showPageNumber: false, isLast: false })
+    )
+    expect(truncateForMenuBar(titleOut).length).toBeGreaterThan(0)
   })
 })

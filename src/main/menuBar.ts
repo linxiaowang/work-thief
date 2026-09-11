@@ -4,7 +4,13 @@ import { getBook, updateBookParseMeta } from './db/books'
 import { listChapters, getChapter, replaceChapters } from './db/chapters'
 import { getProgress, upsertProgress } from './db/progress'
 import { getSettings } from './db/settings'
-import { paginate, selectPageForOffset, resolveChapterJumpPageIndex } from './pagination'
+import {
+  paginate,
+  selectPageForOffset,
+  resolveChapterJumpPageIndex,
+  isBlankPage,
+  findNonEmptyPageIndex
+} from './pagination'
 import { normalizeNovelText } from './parsers/normalize'
 import {
   truncateForMenuBar,
@@ -178,8 +184,12 @@ export function render(): void {
     return
   }
 
+  // Whitespace-only / newline pages must never reach setTitle('').
+  if (cachedPages.length > 0 && isBlankPage(cachedPages[state.pageIndex])) {
+    state.pageIndex = findNonEmptyPageIndex(cachedPages, state.pageIndex, 1)
+  }
   const page = cachedPages[state.pageIndex]
-  if (page == null) {
+  if (page == null || isBlankPage(page)) {
     setTrayTitle('…')
     return
   }
@@ -319,6 +329,8 @@ export async function nextPage(): Promise<void> {
   }
   if (state.pageIndex < cachedPages.length - 1) {
     state.pageIndex++
+    // Skip whitespace-only windows (common after chapter breaks on raw/newline text).
+    state.pageIndex = findNonEmptyPageIndex(cachedPages, state.pageIndex, 1)
   }
   // else: already on last page — stop, still re-render (·完)
   render()
@@ -347,6 +359,7 @@ export async function prevPage(): Promise<void> {
   }
   if (state.pageIndex > 0) {
     state.pageIndex--
+    state.pageIndex = findNonEmptyPageIndex(cachedPages, state.pageIndex, -1)
   }
   render()
   schedulePersistProgress()
@@ -371,8 +384,10 @@ export async function prevChapter(): Promise<void> {
 }
 
 /**
- * Chapter jump — locate title in cachedBookText (ignore stored offsets).
- * pageIndex = floor(idx / charsPerPage). Not found → 「找不到该章」, keep current page.
+ * Chapter jump — recalculate page from this chapter's first char in reading text.
+ * Prefer validated startOffset; else nth title match. Never keep the old pageIndex
+ * on success. Skips blank pages so tray never gets setTitle('').
+ * Not found → 「找不到该章」, keep current page.
  */
 export async function jumpToChapter(chapterIndex: number): Promise<void> {
   if (!state || state.bookId < 0) return
@@ -405,11 +420,14 @@ export async function jumpToChapter(chapterIndex: number): Promise<void> {
     settings.charsPerPage,
     settings.showPageNumber
   )
+  // Recalculate from chapter first char (offset/title) against current pages —
+  // do not reuse the previous book-wide pageIndex.
   const pageIndex = resolveChapterJumpPageIndex(
     cachedBookText,
     chapter,
     effectiveChars,
-    occurrence
+    occurrence,
+    cachedPages
   )
   if (pageIndex == null || cachedPages[pageIndex] == null) {
     console.error('[WorkThief] jumpToChapter failed: title not in reading text', {
@@ -424,7 +442,11 @@ export async function jumpToChapter(chapterIndex: number): Promise<void> {
   }
 
   state.chapterIndex = chapterIndex
-  state.pageIndex = Math.min(pageIndex, cachedPages.length - 1)
+  state.pageIndex = findNonEmptyPageIndex(
+    cachedPages,
+    Math.min(pageIndex, cachedPages.length - 1),
+    1
+  )
   // Immediate novel title (Boss already cleared).
   render()
   schedulePersistProgress(true)
@@ -562,7 +584,9 @@ function persistProgress(): void {
 /** setTitle with empty-getTitle retry at 16 chars (hints / errors / disguise). */
 function setTrayTitle(text: string): void {
   if (!tray) return
-  const primary = truncateForMenuBar(text, MENU_BAR_TITLE_MAX)
+  let primary = truncateForMenuBar(text, MENU_BAR_TITLE_MAX)
+  // Never blank the menu bar — whitespace-only input becomes a visible placeholder.
+  if (!primary) primary = '…'
   tray.setTitle(primary)
   let shown = ''
   try {
@@ -585,6 +609,11 @@ function setTrayTitle(text: string): void {
  */
 function setReadingTrayTitle(page: string, suffix: string, title: string): void {
   if (!tray) return
+  // Blank body (whitespace/newlines) must never clear the tray.
+  if (isBlankPage(page) || !title.replace(/\s+/g, '')) {
+    setTrayTitle(suffix.trim() ? suffix : '…')
+    return
+  }
   // Guarantee: page.length + suffix.length ≤ MAX (enforced by effective chars).
   tray.setTitle(title)
   const totalHint =
