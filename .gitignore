@@ -13,3 +13,4 @@ release/
 .pnpm-store
 .tmp-userdata/
 .test-userdata/
+package-lock.json

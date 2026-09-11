@@ -57,7 +57,13 @@ export function setHotkeysChangedHandler(fn: () => void): void {
  */
 export function applyShortcuts(opts?: { quiet?: boolean }): { ok: boolean; failures: string[] } {
   const failures: string[] = []
-  const settings = getSettings()
+  let settings: AppSettings
+  try {
+    settings = getSettings()
+  } catch (err) {
+    console.error('[WorkThief] applyShortcuts: settings unavailable', err)
+    return { ok: false, failures: ['settings: db unavailable'] }
+  }
   const keys = resolveHotkeys(settings)
 
   globalShortcut.unregisterAll()
@@ -65,12 +71,22 @@ export function applyShortcuts(opts?: { quiet?: boolean }): { ok: boolean; failu
 
   const cbs: HotkeyCallbacks = {
     nextPage: () => {
-      void nextPage()
+      void nextPage().catch((err) => {
+        console.error('[WorkThief] nextPage (hotkey) failed:', err)
+      })
     },
     prevPage: () => {
-      void prevPage()
+      void prevPage().catch((err) => {
+        console.error('[WorkThief] prevPage (hotkey) failed:', err)
+      })
     },
-    toggleHidden: () => toggleHidden()
+    toggleHidden: () => {
+      try {
+        toggleHidden()
+      } catch (err) {
+        console.error('[WorkThief] toggleHidden (hotkey) failed:', err)
+      }
+    }
   }
 
   const tryRegister = (accelerator: string, name: keyof HotkeyCallbacks) => {
@@ -141,9 +157,14 @@ export function getRegisteredShortcuts(): Record<string, string> {
   return { ...lastRegistered }
 }
 
-/** Current accelerators for menu labels (falls back to defaults). */
+/** Current accelerators for menu labels (falls back to defaults; never throws on DB failure). */
 export function getHotkeyAccelerators(settings?: AppSettings): Record<HotkeyBinding, string> {
-  return resolveHotkeys(settings ?? getSettings())
+  try {
+    return resolveHotkeys(settings ?? getSettings())
+  } catch (err) {
+    console.error('[WorkThief] getHotkeyAccelerators: settings unavailable, using defaults', err)
+    return resolveHotkeys(DEFAULT_APP_SETTINGS)
+  }
 }
 
 /** Human-readable copy of current page/Boss shortcuts for Settings UI. */

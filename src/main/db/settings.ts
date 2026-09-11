@@ -46,6 +46,16 @@ function migratePageNumberOff(settings: AppSettings): AppSettings {
   return next
 }
 
+/** Read settings; on DB/native failure return defaults (never throw). */
+export function getSettingsOrDefault(): AppSettings {
+  try {
+    return getSettings()
+  } catch (err) {
+    console.error('[WorkThief] getSettings failed — using defaults', err)
+    return defaultSettings()
+  }
+}
+
 export function getSettings(): AppSettings {
   const d = getDb()
   const row = d.prepare('SELECT value FROM settings WHERE key = ?').get(SETTINGS_KEY) as

@@ -7,6 +7,7 @@ import {
   getHotkeyAccelerators,
   type HotkeyBinding
 } from './shortcuts'
+import { DEFAULT_APP_SETTINGS } from '@shared/types'
 
 export interface ContextMenuCallbacks {
   onOpenSettings: () => void
@@ -21,13 +22,83 @@ export interface ContextMenuCallbacks {
   onQuit: () => void
 }
 
+const DEFAULT_HOTKEYS = {
+  nextPage: DEFAULT_APP_SETTINGS.hotkeyNextPage,
+  prevPage: DEFAULT_APP_SETTINGS.hotkeyPrevPage,
+  toggleHidden: DEFAULT_APP_SETTINGS.hotkeyToggleHidden
+} as const
+
+/**
+ * Minimal tray menu when SQLite / native module is unavailable.
+ * Always includes 选择小说… + 退出 so the app stays usable.
+ */
+function buildDegradedMenu(cb: ContextMenuCallbacks, err?: unknown): Menu {
+  const msg = err instanceof Error ? err.message : err != null ? String(err) : ''
+  const arch = /incompatible architecture|x86_64|arm64|better-sqlite3|native/i.test(msg)
+  const items: MenuItemConstructorOptions[] = [
+    {
+      label: '选择小说…',
+      click: cb.onChooseNovel
+    },
+    { type: 'separator' },
+    {
+      label: '数据库不可用（降级菜单）',
+      enabled: false
+    },
+    {
+      label: arch
+        ? '架构不匹配：见 README · 原生模块'
+        : '见 README · 原生模块 / pnpm setup',
+      enabled: false
+    },
+    { type: 'separator' },
+    { label: 'WorkThief 0.3', enabled: false },
+    { label: '退出', click: cb.onQuit }
+  ]
+  return Menu.buildFromTemplate(items)
+}
+
+function safeHotkeys(): Record<HotkeyBinding, string> {
+  try {
+    return getHotkeyAccelerators()
+  } catch (err) {
+    console.error('[WorkThief] getHotkeyAccelerators failed — using defaults', err)
+    return { ...DEFAULT_HOTKEYS }
+  }
+}
+
 /**
  * Tray menu: Settings / Choose novel / Prev·Next / Boss / Hotkeys / Quit.
  * Bookshelf + chapter jump stay as optional extras.
+ *
+ * All DB access is wrapped: listBooks / getBook / listChapters / getSettings
+ * (via getHotkeyAccelerators) must NEVER escape as UnhandledPromiseRejection.
+ * On failure → degraded menu (至少 选择小说… / 退出).
  */
 export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
+  try {
+    return buildFullContextMenu(cb)
+  } catch (err) {
+    console.error(
+      '[WorkThief] buildContextMenu failed (DB/native) — serving degraded menu',
+      err
+    )
+    try {
+      return buildDegradedMenu(cb, err)
+    } catch (degradedErr) {
+      console.error('[WorkThief] degraded menu build failed', degradedErr)
+      // Absolute last resort — Quit only
+      return Menu.buildFromTemplate([{ label: '退出', click: cb.onQuit }])
+    }
+  }
+}
+
+function buildFullContextMenu(cb: ContextMenuCallbacks): Menu {
   const state = getState()
-  const currentBook = state && state.bookId > 0 ? getBook(state.bookId) : null
+  // Isolate each DB touch so one failure still degrades the whole menu safely
+  // (outer try in buildContextMenu is the comprehensive catch).
+  const currentBook =
+    state && state.bookId > 0 ? getBook(state.bookId) : null
   const allBooks = listBooks()
   const chapters = currentBook ? listChapters(currentBook.id) : []
   const totalPages = getCurrentPages().length
@@ -36,7 +107,7 @@ export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
       ? ` · ${(state?.pageIndex ?? 0) + 1}/${totalPages}`
       : ''
 
-  const hotkeys = getHotkeyAccelerators()
+  const hotkeys = safeHotkeys()
 
   const items: MenuItemConstructorOptions[] = []
 
@@ -59,7 +130,11 @@ export function buildContextMenu(cb: ContextMenuCallbacks): Menu {
         type: 'checkbox' as const,
         checked: state?.bookId === book.id,
         click: () => {
-          touchBookOpened(book.id)
+          try {
+            touchBookOpened(book.id)
+          } catch (err) {
+            console.error('[WorkThief] touchBookOpened failed', err)
+          }
           cb.onSwitchBook(book.id)
         }
       }))

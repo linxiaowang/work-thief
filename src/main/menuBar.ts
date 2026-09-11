@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { getBook, updateBookParseMeta } from './db/books'
 import { listChapters, getChapter, replaceChapters } from './db/chapters'
 import { getProgress, upsertProgress } from './db/progress'
-import { getSettings } from './db/settings'
+import { getSettings, getSettingsOrDefault } from './db/settings'
 import {
   paginate,
   selectPageForOffset,
@@ -151,7 +151,9 @@ export function initTray(): void {
     if (!state || state.bookId < 0) {
       onNeedChooseNovel?.()
     } else {
-      void nextPage()
+      void nextPage().catch((err) => {
+        console.error('[WorkThief] nextPage (tray click) failed:', err)
+      })
     }
   })
 
@@ -193,7 +195,7 @@ export function render(): void {
     setTrayTitle('…')
     return
   }
-  const settings = getSettings()
+  const settings = getSettingsOrDefault()
   const total = cachedPages.length
   const isLast = total > 0 && state.pageIndex >= total - 1
   // Suffix first — page was already sliced to fit bodyMax; never trim page.
@@ -207,7 +209,7 @@ export function render(): void {
 
 /** Boss disguise: custom moyu_text, or current HH:mm when empty. */
 export function resolveDisguiseText(): string {
-  const raw = getSettings().moyuText?.trim() ?? ''
+  const raw = getSettingsOrDefault().moyuText?.trim() ?? ''
   if (raw) return raw
   const now = new Date()
   const hh = String(now.getHours()).padStart(2, '0')
@@ -252,7 +254,7 @@ export async function refreshChaptersFromFile(bookId: number): Promise<void> {
 
 export async function loadBookPages(): Promise<void> {
   if (!state || state.bookId < 0) return
-  const settings = getSettings()
+  const settings = getSettingsOrDefault()
   // Include showPageNumber — it changes suffix length → effective bodyMax.
   const key = `${state.bookId}:${settings.charsPerPage}:${settings.preferredEncoding}:${settings.showPageNumber}`
   if (cachedBookKey === key && cachedPages.length > 0) return
@@ -406,7 +408,7 @@ export async function jumpToChapter(chapterIndex: number): Promise<void> {
     return
   }
 
-  const settings = getSettings()
+  const settings = getSettingsOrDefault()
   const title = chapter.title?.trim() ?? ''
   let occurrence = 0
   for (const c of listChapters(state.bookId)) {

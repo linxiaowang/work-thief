@@ -64,44 +64,52 @@ app.on('second-instance', () => {
 let trayMenu: Menu | null = null
 
 app.whenReady().then(async () => {
-  wireSettingsIpc()
-  setSettingsSavedHandler(() => refreshContextMenu())
-  setHotkeysChangedHandler(() => refreshContextMenu())
-  setChooseNovelHandler(() => {
-    void chooseNovel().then(refreshContextMenu)
-  })
-
-  // Tray first so a native crash / throw in db or watcher still leaves a menu-bar item.
-  initTray()
-  setRightClickHandler(() => {
-    const tray = getTray()
-    if (!tray) return
-    refreshContextMenu()
-    if (trayMenu) tray.popUpContextMenu(trayMenu)
-  })
-  refreshContextMenu()
-  notifyStarted()
-
   try {
-    getDb()
-    await ensureWatchedFolder()
-    await resumeWatching()
-    await pickInitialBook()
-    applyShortcuts()
+    wireSettingsIpc()
+    setSettingsSavedHandler(() => refreshContextMenu())
+    setHotkeysChangedHandler(() => refreshContextMenu())
+    setChooseNovelHandler(() => {
+      settleMenu(chooseNovel(), 'chooseNovel')
+    })
+
+    // Tray first so a native crash / throw in db or watcher still leaves a menu-bar item.
+    initTray()
+    setRightClickHandler(() => {
+      const tray = getTray()
+      if (!tray) return
+      refreshContextMenu()
+      if (trayMenu) tray.popUpContextMenu(trayMenu)
+    })
     refreshContextMenu()
+    notifyStarted()
+
+    try {
+      getDb()
+      await ensureWatchedFolder()
+      await resumeWatching()
+      await pickInitialBook()
+      applyShortcuts()
+      refreshContextMenu()
+    } catch (err) {
+      console.error('[WorkThief] startup after tray failed:', err)
+      notifyDbOrStartupFailure(err)
+      refreshContextMenu()
+    }
+
+    app.on('activate', () => {
+      refreshContextMenu()
+    })
   } catch (err) {
-    console.error('[WorkThief] startup after tray failed:', err)
+    console.error('[WorkThief] whenReady bootstrap failed:', err)
     notifyDbOrStartupFailure(err)
     try {
       refreshContextMenu()
     } catch (menuErr) {
-      console.error('[WorkThief] refreshContextMenu after startup error:', menuErr)
+      console.error('[WorkThief] refreshContextMenu after bootstrap error:', menuErr)
     }
   }
-
-  app.on('activate', () => {
-    refreshContextMenu()
-  })
+}).catch((err) => {
+  console.error('[WorkThief] app.whenReady rejected:', err)
 })
 
 // Tray-only app: closing BrowserWindows (hotkey capture / settings) must NEVER quit.
@@ -163,7 +171,14 @@ function notifyStarted(): void {
 }
 
 async function pickInitialBook(): Promise<void> {
-  const books = listBooks()
+  let books
+  try {
+    books = listBooks()
+  } catch (err) {
+    console.error('[WorkThief] pickInitialBook listBooks failed:', err)
+    setState({ bookId: -1, chapterIndex: 0, pageIndex: 0, hidden: false })
+    throw err
+  }
   if (books.length === 0) {
     setState({ bookId: -1, chapterIndex: 0, pageIndex: 0, hidden: false })
     return
@@ -172,39 +187,97 @@ async function pickInitialBook(): Promise<void> {
   await switchToBook(sorted[0].id)
 }
 
-function refreshContextMenu(): void {
-  syncChapterIndexForMenu()
-  const menu = buildContextMenu({
-    onOpenSettings: () => openSettingsWindow(),
-    onChooseNovel: () => {
-      void chooseNovel().then(refreshContextMenu)
-    },
-    onPrevPage: () => {
-      void prevPage().then(refreshContextMenu)
-    },
-    onNextPage: () => {
-      void nextPage().then(refreshContextMenu)
-    },
-    onSwitchBook: (id) => {
-      void switchToBook(id).then(refreshContextMenu)
-    },
-    onJumpToChapter: (idx) => {
-      void jumpToChapter(idx).then(refreshContextMenu)
-    },
-    onToggleHidden: () => {
-      toggleHidden()
+/** Catch async failures so menu/DB errors never become UnhandledPromiseRejection. */
+function settleMenu(task: Promise<unknown>, label: string): void {
+  void task.then(refreshContextMenu).catch((err) => {
+    console.error(`[WorkThief] ${label} failed:`, err)
+    try {
       refreshContextMenu()
-    },
-    onRebindHotkey: (binding) => {
-      startHotkeyRecording(binding)
-    },
-    onResetHotkeys: () => {
-      resetHotkeysToDefaults()
-      refreshContextMenu()
-    },
-    onQuit: () => app.quit()
+    } catch (menuErr) {
+      console.error('[WorkThief] refreshContextMenu after', label, 'error:', menuErr)
+    }
   })
-  trayMenu = menu
-  Menu.setApplicationMenu(menu)
-  // Intentionally NOT tray.setContextMenu(menu) — left click must page like Thief.
+}
+
+/**
+ * Rebuild tray/app menu. Never throws to callers — DB failures yield a degraded
+ * menu from buildContextMenu (选择小说… / 退出) instead of UnhandledPromiseRejection.
+ */
+function refreshContextMenu(): void {
+  try {
+    try {
+      syncChapterIndexForMenu()
+    } catch (err) {
+      console.error('[WorkThief] syncChapterIndexForMenu failed (DB?):', err)
+    }
+    const menu = buildContextMenu({
+      onOpenSettings: () => {
+        try {
+          openSettingsWindow()
+        } catch (err) {
+          console.error('[WorkThief] openSettingsWindow failed:', err)
+        }
+      },
+      onChooseNovel: () => {
+        settleMenu(chooseNovel(), 'chooseNovel')
+      },
+      onPrevPage: () => {
+        settleMenu(prevPage(), 'prevPage')
+      },
+      onNextPage: () => {
+        settleMenu(nextPage(), 'nextPage')
+      },
+      onSwitchBook: (id) => {
+        settleMenu(switchToBook(id), `switchToBook(${id})`)
+      },
+      onJumpToChapter: (idx) => {
+        settleMenu(jumpToChapter(idx), `jumpToChapter(${idx})`)
+      },
+      onToggleHidden: () => {
+        try {
+          toggleHidden()
+        } catch (err) {
+          console.error('[WorkThief] toggleHidden failed:', err)
+        }
+        refreshContextMenu()
+      },
+      onRebindHotkey: (binding) => {
+        try {
+          startHotkeyRecording(binding)
+        } catch (err) {
+          console.error('[WorkThief] startHotkeyRecording failed:', err)
+        }
+      },
+      onResetHotkeys: () => {
+        try {
+          resetHotkeysToDefaults()
+        } catch (err) {
+          console.error('[WorkThief] resetHotkeysToDefaults failed:', err)
+        }
+        refreshContextMenu()
+      },
+      onQuit: () => app.quit()
+    })
+    trayMenu = menu
+    Menu.setApplicationMenu(menu)
+    // Intentionally NOT tray.setContextMenu(menu) — left click must page like Thief.
+  } catch (err) {
+    console.error('[WorkThief] refreshContextMenu failed — last-resort Quit/Choose menu:', err)
+    try {
+      const fallback = Menu.buildFromTemplate([
+        {
+          label: '选择小说…',
+          click: () => settleMenu(chooseNovel(), 'chooseNovel')
+        },
+        { type: 'separator' },
+        { label: '数据库不可用', enabled: false },
+        { label: '退出', click: () => app.quit() }
+      ])
+      trayMenu = fallback
+      Menu.setApplicationMenu(fallback)
+    } catch (fallbackErr) {
+      console.error('[WorkThief] last-resort menu failed:', fallbackErr)
+      trayMenu = null
+    }
+  }
 }

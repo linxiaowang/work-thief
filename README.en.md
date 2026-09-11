@@ -23,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-On Apple Silicon, if `better-sqlite3` arch mismatches, see **Native modules** below.
+On Apple Silicon: **always use arm64 Node** (`node -p process.arch` → `arm64`). If `better-sqlite3` arch mismatches, see **Native modules** below.
 
 ## Verify steps
 
@@ -78,18 +78,41 @@ Still watches `~/Documents/WorkThief`. First-run uses the file picker, not only 
 
 `better-sqlite3` must match **Electron's** arch, not only Node's.
 
-**Symptom:** after clone/pull on an arm64 Mac, DB fails or Electron reports:
-`mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64')`
-(or the reverse). Often caused by x86_64 Node/Rosetta producing the wrong `.node` binary.
+> **Always use arm64 Node on Apple Silicon.** Do not use Rosetta / x86_64 Node — that repeatedly causes:
+> `mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64')`.
 
-**After clone or pull on an arm64 Mac:**
+**Symptom:** after clone / pull / `pnpm install`, the DB fails or Electron reports the arch error above. Common cause: x86_64 Node (Rosetta) produced the wrong `.node`, or postinstall rebuild failed and left the wrong binary.
 
-1. Confirm arm64 Node: `node -p process.arch` (expect `arm64`)
-2. `pnpm install` (postinstall runs setup; soft-fails with a console hint if rebuild fails)
-3. If DB still fails: `pnpm setup` or `pnpm rebuild`
-4. Still broken: remove `node_modules`, then `pnpm install` and `pnpm setup` again
+**After every clone or pull on an arm64 Mac:**
 
-`pnpm setup` downloads Electron if needed, then `electron-builder install-app-deps` (fallback: `electron-rebuild`) so `better-sqlite3` matches Electron. `pnpm rebuild` is the native-only path.
+1. **Confirm arm64 Node (required):**
+   ```bash
+   node -p process.arch
+   ```
+   Must print `arm64`. If `x64`: install [Node.js macOS ARM64](https://nodejs.org/), or open an arm64 shell first:
+   ```bash
+   arch -arm64 zsh
+   # then install / switch to arm64 Node and reopen the terminal
+   ```
+2. Clean install:
+   ```bash
+   rm -rf node_modules
+   pnpm install
+   ```
+3. Rebuild natives for Electron:
+   ```bash
+   pnpm setup
+   ```
+   (`pnpm rebuild` is the native-only path.)
+4. Optional verify:
+   ```bash
+   find node_modules -name better_sqlite3.node -exec file {} \;
+   ```
+   Expect `arm64` (not a lone `x86_64`).
+5. Launch: `pnpm dev`
+
+`pnpm setup` / postinstall: download Electron if needed → `electron-builder install-app-deps` (fallback `electron-rebuild`) → best-effort arch check on the `.node`. If Node itself is x64, the script prints the steps above and soft-fails (install continues), **but the app still cannot load the DB until you switch to arm64 Node and repeat steps 2–3.**
+
 
 ## Limits
 

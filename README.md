@@ -23,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-Apple Silicon 上若 `better-sqlite3` 架构不对，见下方 **原生模块**。
+Apple Silicon：**必须用 arm64 Node**（`node -p process.arch` → `arm64`）。若 `better-sqlite3` 架构不对，见下方 **原生模块**。
 
 ## 验证步骤
 
@@ -78,18 +78,41 @@ Apple Silicon 上若 `better-sqlite3` 架构不对，见下方 **原生模块**�
 
 `better-sqlite3` 必须匹配 **Electron** 的架构，而不只是本机 Node。
 
-**现象：** 在 arm64 Mac 上 clone/pull 后数据库失败，或 Electron 报：
-`mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64')`
-（或相反）。常见原因是 x86_64 Node / Rosetta 编出了错误的 `.node`。
+> **务必使用 arm64 Node。** 在 Apple Silicon 上不要用 Rosetta / x86_64 Node，否则会反复出现：
+> `mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64')`。
 
-**arm64 Mac 上 clone 或 pull 之后：**
+**现象：** clone / pull / `pnpm install` 之后数据库打不开，或 Electron 报上述架构错误。常见原因：x86_64 Node（Rosetta）编出了错误的 `.node`，或 postinstall 重建失败后仍留着错误二进制。
 
-1. 确认 arm64 Node：`node -p process.arch`（应为 `arm64`）
-2. `pnpm install`（postinstall 会跑 setup；失败时控制台有软提示）
-3. 若数据库仍失败：`pnpm setup` 或 `pnpm rebuild`
-4. 仍不行：删掉 `node_modules`，再 `pnpm install` 与 `pnpm setup`
+**每次在 arm64 Mac 上 clone / pull 之后请按下面做：**
 
-`pnpm setup` 会先下载 Electron（如需），再 `electron-builder install-app-deps`（回退 `electron-rebuild`），让 `better-sqlite3` 对齐 Electron。`pnpm rebuild` 只走原生重建。
+1. **确认 arm64 Node（必须）：**
+   ```bash
+   node -p process.arch
+   ```
+   输出必须是 `arm64`。若是 `x64`：安装 [Node.js macOS ARM64](https://nodejs.org/)，或先开 arm64 shell 再装 Node：
+   ```bash
+   arch -arm64 zsh
+   # 然后安装 / 切换到 arm64 Node，再重新打开终端
+   ```
+2. 清掉旧模块并安装：
+   ```bash
+   rm -rf node_modules
+   pnpm install
+   ```
+3. 显式重建原生模块（对齐 Electron）：
+   ```bash
+   pnpm setup
+   ```
+   （`pnpm rebuild` 只跑原生重建，效果类似。）
+4. 可选核验：
+   ```bash
+   find node_modules -name better_sqlite3.node -exec file {} \;
+   ```
+   期望看到 `arm64`（不要是单独的 `x86_64`）。
+5. 再启动：`pnpm dev`
+
+`pnpm setup` / postinstall 会：下载 Electron（如需）→ `electron-builder install-app-deps`（失败则 `electron-rebuild`）→ 尽量检查 `.node` 架构。若 Node 本身是 x64，脚本会给出上述步骤并软失败（不阻断 install），**但应用仍无法加载 DB，必须换成 arm64 Node 后重做 2–3。**
+
 
 ## 限制
 
