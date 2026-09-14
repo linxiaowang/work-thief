@@ -1,139 +1,86 @@
 # WorkThief
 
-[中文](README.md)
+[简体中文](README.md)
 
-> macOS menu-bar TXT novel reader (v0.3.0)
+Read local **TXT novels** from the macOS **menu bar**—no extra window, low profile; left-click to turn pages, one hotkey for a “busy at work” decoy.
 
-Body text via `Tray.setTitle`. Book-wide fixed-length paging (`charsPerPage` / page_size). Chapters are optional jump targets only—not the main reading flow.
+<p align="center">
+  <img src="./resources/icon.png" width="96" height="96" alt="WorkThief icon">
+</p>
 
-Local TXT · SQLite · optional folder watcher · global hotkeys · no EPUB / stocks / web / video.
-
-Packaged builds hide the Dock; dev shows the Dock.
+Library, reading progress, chapter jumps, and global hotkeys. macOS only; download below to get started.
 
 ---
 
-## Install
+## Download
 
-Requires: macOS, Node 20+, pnpm.
+<p align="center">
+  <a href="https://github.com/linxiaowang/work-thief/releases/latest/download/WorkThief-Mac.dmg">
+    <img src="https://img.shields.io/badge/macOS-Download%20DMG-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS">
+  </a>
+</p>
+
+| Platform | Notes |
+|----------|--------|
+| Apple Silicon (M series) | [WorkThief-Mac.dmg](https://github.com/linxiaowang/work-thief/releases/latest/download/WorkThief-Mac.dmg) → drag to Applications |
+| Intel Mac | Check [Releases](https://github.com/linxiaowang/work-thief/releases/latest) for an Intel build if listed |
+
+Version notes and older builds: [Releases](https://github.com/linxiaowang/work-thief/releases/latest).
+
+### Won’t open or “app is damaged”
+
+The app is **not Apple-notarized**. macOS may block the first launch—the file is not corrupt.
+
+1. Click **Cancel** (don’t move to Trash).
+2. In Terminal (adjust the path if needed):
 
 ```bash
-git clone https://github.com/linxiaowang/work-thief.git
-cd work-thief
-pnpm install
-pnpm dev
+xattr -cr /Applications/WorkThief.app
 ```
 
-On Apple Silicon: **always use arm64 Node** (`node -p process.arch` → `arm64`). If `better-sqlite3` arch mismatches, see **Native modules** below.
+3. Open again, or **Right-click → Open → Open anyway**. Allow in **System Settings → Privacy & Security** if prompted.
 
-## Verify steps
+Updates are manual via GitHub Releases (no in-app updater).
 
-1. Launch; the menu-bar title appears on the **RIGHT** (near the clock). Empty shelf shows `WorkThief · 选 txt`.
-2. Left-click the title when empty → pick a txt (or right-click → **选择小说…** / Choose novel).
-3. Menu bar shows the current page body (optional page/total suffix).
-4. Left-click pages immediately; right-click opens the menu.
-5. Default hotkeys: ⌘⌥. next / ⌘⌥, prev / ⌘⌥M Boss (`CommandOrControl+Alt`). Customize via right-click → **快捷键**.
-6. Boss: title switches to disguise text (default 「工作中」; empty → current `HH:mm`), then toggles back. Never blank-only.
-7. Settings: watched path, chars per page, encoding auto/UTF-8/GBK, disguise text, show page #, and a **current shortcut summary**.
+---
 
-The tray stays on the right near the clock.
+## Quick start
 
-## Tray gestures
+1. Launch WorkThief; text appears on the **right** of the menu bar (near the clock). With no book loaded, it prompts you to pick a txt.
+2. **Left-click** the text → choose a `.txt`; or **right-click** → **Choose novel…**.
+3. **Left-click** → next page; **right-click** → menu (settings, library, prev/next, chapters, Boss, hotkeys, quit).
+4. **Right-click** → **Settings…** for chars per page, Chinese encoding, page numbers, Boss decoy text, watch folder, etc.
 
-| Gesture | Action |
-|---|---|
-| Left click | Has book → next page; no book → file picker |
-| Right click | Context menu (Settings / Choose novel / Bookshelf / Prev·Next / Chapter jump / Boss / Hotkeys / Quit) |
-
-Do **not** use `tray.setContextMenu` (it steals left-click).
+The icon stays on the right side of the menu bar.
 
 ## Hotkeys
 
-Needs Accessibility permission, then restart the app. On register failure: a Notification (the novel tray title is never overwritten).
+Global hotkeys need **Accessibility** permission; **restart WorkThief** after granting.
 
-### Defaults
+| Keys | Action |
+|------|--------|
+| ⌘⌥. | Next page |
+| ⌘⌥, | Previous page |
+| ⌘⌥M | Boss: swap menu bar to decoy text (e.g. “工作中”); press again to resume |
 
-| Accelerator | Action |
-|---|---|
-| `CommandOrControl+Alt+.` (⌘⌥.) | Next page |
-| `CommandOrControl+Alt+,` (⌘⌥,) | Prev page |
-| `CommandOrControl+Alt+M` (⌘⌥M) | Boss disguise toggle |
+Change bindings via **Right-click → Hotkeys**; **Esc** cancels recording; **Restore defaults** resets the table.
 
-Chapter jump is **menu only** (no chapter hotkeys by default).
+Chapter jumps are in the **right-click menu** only (no default chapter hotkeys).
 
-### Customize
+## Folder watch (optional)
 
-1. Right-click tray → **快捷键**.
-2. Each item shows the current accelerator (上一页 / 下一页 / Boss).
-3. Click an item → tray title shows **等待按键…**; press the new combo.
-4. **Esc** cancels. If the combo is already used by another of the three bindings (or OS register fails), a tip appears and the change is rejected (on conflict, recording stays active).
-5. On success, the tray briefly shows **已设为 …** and a notification fires.
-6. **恢复默认** restores ⌘⌥, / ⌘⌥. / ⌘⌥M.
-7. Changes apply immediately and persist across restarts (SQLite settings).
+Drop `.txt` files into **Documents/WorkThief** (path configurable in settings) to add them to the library. You can also import via **Choose novel** only.
 
-## Watcher bonus
+## FAQ
 
-Still watches `~/Documents/WorkThief`. First-run uses the file picker, not only the watcher.
+- **TXT only**—no EPUB, etc.
+- **Garbled Chinese**: try UTF-8 or GBK in settings, or Auto.
+- **Hotkeys dead**: confirm Accessibility + restart the app.
+- **Where data lives**: on your Mac under `~/Library/Application Support/WorkThief`; delete that folder to wipe library/progress after uninstalling.
 
-## Native modules (Apple Silicon)
+## Developers
 
-`better-sqlite3` must match **Electron's** arch, not only Node's.
-
-> **Always use arm64 Node on Apple Silicon.** Do not use Rosetta / x86_64 Node — that repeatedly causes:
-> `mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64')`.
-
-**Symptom:** after clone / pull / `pnpm install`, the DB fails or Electron reports the arch error above. Common cause: x86_64 Node (Rosetta) produced the wrong `.node`, or postinstall rebuild failed and left the wrong binary.
-
-**After every clone or pull on an arm64 Mac:**
-
-1. **Confirm arm64 Node (required):**
-   ```bash
-   node -p process.arch
-   ```
-   Must print `arm64`. If `x64`: install [Node.js macOS ARM64](https://nodejs.org/), or open an arm64 shell first:
-   ```bash
-   arch -arm64 zsh
-   # then install / switch to arm64 Node and reopen the terminal
-   ```
-2. Clean install:
-   ```bash
-   rm -rf node_modules
-   pnpm install
-   ```
-3. Rebuild natives for Electron:
-   ```bash
-   pnpm setup
-   ```
-   (`pnpm rebuild` is the native-only path.)
-4. Optional verify:
-   ```bash
-   find node_modules -name better_sqlite3.node -exec file {} \;
-   ```
-   Expect `arm64` (not a lone `x86_64`).
-5. Launch: `pnpm dev`
-
-`pnpm setup` / postinstall: download Electron if needed → `electron-builder install-app-deps` (fallback `electron-rebuild`) → best-effort arch check on the `.node`. If Node itself is x64, the script prints the steps above and soft-fails (install continues), **but the app still cannot load the DB until you switch to arm64 Node and repeat steps 2–3.**
-
-
-## Limits
-
-- Hotkeys need Accessibility
-- Encoding: auto / UTF-8 / GBK
-- macOS only
-- Unsigned DMG (first open may require allowing in Privacy & Security)
-
-## Packaging
-
-```bash
-pnpm dist
-```
-
-Artifacts land under `release/` (versioned subfolder, e.g. `release/0.3.0/`).
-
-## Layout & data
-
-`src/main`: tray, paging, hotkeys, settings, watcher; `resources`: icons + `settings.html`; `src/shared`: shared types.
-
-Data: `~/Library/Application Support/WorkThief/library.db`. See `DESIGN.md`.
+Node 20+ and [pnpm](https://pnpm.io/): `git clone` → `pnpm install` → `pnpm dev`. Use arm64 Node on Apple Silicon; run `pnpm setup` if startup fails. Package: `pnpm dist`. Maintainers: push a `v*` tag to trigger CI—see [`.github/workflows/release.yml`](./.github/workflows/release.yml). Design notes: [`DESIGN.md`](./DESIGN.md).
 
 ## License
 

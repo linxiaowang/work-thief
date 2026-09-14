@@ -1,6 +1,6 @@
 {
   "name": "work-thief",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "macOS menu-bar sneak-reading app \u2014 TXT via Tray.setTitle.",
   "main": "out/main/index.js",
   "type": "module",

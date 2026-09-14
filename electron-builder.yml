@@ -11,11 +11,13 @@ asar: true
 mac:
   category: public.app-category.productivity
   icon: resources/icon.png
+  identity: null
   target:
     - target: dmg
       arch:
         - arm64
         - x64
+  artifactName: ${productName}-Mac.${ext}
   entitlements: resources/entitlements/macos.plist
   hardenedRuntime: false
   gatekeeperAssess: false
