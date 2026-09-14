@@ -9,6 +9,31 @@ describe('detectChapters', () => {
     expect(chapters[0].startOffset).toBe(0)
   })
 
+  it('detects inline chapter after sentence end (奇书网 TXT)', () => {
+    const text =
+      '引子\n\n第 一 章\n正文A。\n\n肖亚文告别，再见了。第 二 章\n１\n正文B。\n问号。第 三 章\n正文C'
+    const chapters = detectChapters(text)
+    expect(chapters.map((c) => c.title.replace(/\s+/g, ''))).toEqual([
+      '第一章',
+      '第二章',
+      '第三章'
+    ])
+  })
+
+  it('detects inline chapter after closing quote', () => {
+    const text = '只说了一个字：“哭！”第二十九章\n正文'
+    const chapters = detectChapters(text)
+    expect(chapters.some((c) => c.title.replace(/\s+/g, '') === '第二十九章')).toBe(true)
+  })
+
+  it('does not treat law citations as chapters', () => {
+    const text =
+      '根据《中华人民共和国反不正当竞争法》第四章第二十条的规定，用人单位应当承担损害赔偿责任，详情略。'
+    const chapters = detectChapters(text)
+    expect(chapters).toHaveLength(1)
+    expect(chapters[0].title).not.toMatch(/第四章/)
+  })
+
   it('detects 第一章 style headings', () => {
     const text = '引子\n第一段。\n\n第一章 开始\n正文开始。\n\n第二章 继续\n更多正文。'
     const chapters = detectChapters(text)

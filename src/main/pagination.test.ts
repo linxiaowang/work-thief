@@ -7,6 +7,8 @@ import {
   resolveChapterStartOffset,
   isBlankPage,
   findNonEmptyPageIndex,
+  findNonEmptyPageIndexForward,
+  findNonEmptyPageIndexBackward,
   _internals
 } from './pagination'
 import { parseTxtText } from './parsers/txt'
@@ -109,6 +111,12 @@ describe('isBlankPage / findNonEmptyPageIndex', () => {
     expect(findNonEmptyPageIndex(pages, 2, 1)).toBe(3)
     expect(findNonEmptyPageIndex(pages, 4, -1)).toBe(3)
     expect(findNonEmptyPageIndex(pages, 1, -1)).toBe(0)
+  })
+
+  it('findNonEmptyPageIndexForward never moves to an earlier index', () => {
+    const pages = ['甲乙', '\n\n', '丙丁']
+    expect(findNonEmptyPageIndexForward(pages, 1)).toBe(2)
+    expect(findNonEmptyPageIndexForward(pages, 2)).toBe(2)
   })
 })
 

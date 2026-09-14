@@ -60,6 +60,38 @@ export function findNonEmptyPageIndex(
   return clamped
 }
 
+/** Next-page: only scan forward — never jump back to an earlier page. */
+export function findNonEmptyPageIndexForward(
+  pages: string[],
+  from: number
+): number {
+  if (pages.length === 0) return 0
+  const start = Math.max(0, Math.min(from, pages.length - 1))
+  for (let i = start; i < pages.length; i++) {
+    if (!isBlankPage(pages[i])) return i
+  }
+  for (let i = pages.length - 1; i >= 0; i--) {
+    if (!isBlankPage(pages[i])) return i
+  }
+  return start
+}
+
+/** Prev-page: only scan backward. */
+export function findNonEmptyPageIndexBackward(
+  pages: string[],
+  from: number
+): number {
+  if (pages.length === 0) return 0
+  const start = Math.max(0, Math.min(from, pages.length - 1))
+  for (let i = start; i >= 0; i--) {
+    if (!isBlankPage(pages[i])) return i
+  }
+  for (let i = 0; i < pages.length; i++) {
+    if (!isBlankPage(pages[i])) return i
+  }
+  return start
+}
+
 /** Pick the page whose start is nearest to approxOffset (char offset in reading text). */
 export function selectPageForOffset(
   pages: string[],

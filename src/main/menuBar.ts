@@ -9,7 +9,9 @@ import {
   selectPageForOffset,
   resolveChapterJumpPageIndex,
   isBlankPage,
-  findNonEmptyPageIndex
+  findNonEmptyPageIndex,
+  findNonEmptyPageIndexForward,
+  findNonEmptyPageIndexBackward
 } from './pagination'
 import { normalizeNovelText } from './parsers/normalize'
 import {
@@ -332,7 +334,7 @@ export async function nextPage(): Promise<void> {
   if (state.pageIndex < cachedPages.length - 1) {
     state.pageIndex++
     // Skip whitespace-only windows (common after chapter breaks on raw/newline text).
-    state.pageIndex = findNonEmptyPageIndex(cachedPages, state.pageIndex, 1)
+    state.pageIndex = findNonEmptyPageIndexForward(cachedPages, state.pageIndex)
   }
   // else: already on last page — stop, still re-render (·完)
   render()
@@ -361,7 +363,7 @@ export async function prevPage(): Promise<void> {
   }
   if (state.pageIndex > 0) {
     state.pageIndex--
-    state.pageIndex = findNonEmptyPageIndex(cachedPages, state.pageIndex, -1)
+    state.pageIndex = findNonEmptyPageIndexBackward(cachedPages, state.pageIndex)
   }
   render()
   schedulePersistProgress()

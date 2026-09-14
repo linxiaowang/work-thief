@@ -22,6 +22,13 @@ interface PatternSet {
 // Chinese numerals commonly used in chapter headings (一~十, 百, 千, etc.)
 const CN_NUM =
   '[一二三四五六七八九十百千万零〇两壹贰叁肆伍陆柒捌玖拾佰仟]+'
+/** 第 + numeral + 章/节… — numeral may have spaces between chars (「第 一 章」). */
+const CN_CHAPTER_HEAD =
+  `第\\s*(?:[0-9]+|${CN_NUM})\\s*[章回节卷集部篇]`
+/** Inline headings (e.g. 「…再见了。第 二 章」) — require 章 to avoid 「(第X部」). */
+const CN_CHAPTER_INLINE = `第\\s*(?:[0-9]+|${CN_NUM})\\s*章`
+/** Sentence/dialogue end before an inline chapter marker (incl. curly quotes). */
+const INLINE_CHAPTER_LOOKBEHIND = '(?<=[。！？…\\u201c\\u201d\\u201f""」])'
 
 const PATTERNS: PatternSet[] = [
   // 【第一章 标题】 / 《第二章 标题》 — bracket-wrapped heading. Allow
@@ -47,7 +54,13 @@ const PATTERNS: PatternSet[] = [
   // 第一章 / 第123章 / 第1节
   {
     id: 'cn-chapter',
-    regex: new RegExp(`^第\\s*(?:[0-9]+|${CN_NUM})\\s*[章回节卷集部篇].*$`, 'm'),
+    regex: new RegExp(`^${CN_CHAPTER_HEAD}.*$`, 'm'),
+    clean: (raw) => raw.trim().replace(/\s+/g, ' ')
+  },
+  // …正文。第 二 章 / "哭！"第二十九章 — not at line start (common in Qisuu TXT).
+  {
+    id: 'cn-chapter-inline',
+    regex: new RegExp(`${INLINE_CHAPTER_LOOKBEHIND}${CN_CHAPTER_INLINE}`),
     clean: (raw) => raw.trim().replace(/\s+/g, ' ')
   },
   // Chapter 1 / CHAPTER I
@@ -115,7 +128,7 @@ export function detectChapters(text: string): ChapterMatch[] {
     }
   }
 
-  return deduped.map((m, i) => {
+  const chapters = deduped.map((m, i) => {
     const pattern = PATTERNS.find((p) => p.id === m.patternId)!
     return {
       index: i,
@@ -123,6 +136,17 @@ export function detectChapters(text: string): ChapterMatch[] {
       startOffset: m.offset
     }
   })
+
+  return chapters
+    .filter((c) => !isPartMarkerTitle(c.title))
+    .map((c, i) => ({ ...c, index: i }))
+}
+
+/** 「第一部分」「第五部」 — volume markers, not navigable chapters. */
+function isPartMarkerTitle(title: string): boolean {
+  const t = title.replace(/\s+/g, '')
+  if (!/^第/.test(t)) return false
+  return /部$/.test(t) && !/章/.test(t)
 }
 
 /**
