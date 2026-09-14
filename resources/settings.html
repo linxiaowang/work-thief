@@ -104,8 +104,9 @@
   </div>
   <div class="hint" id="novelTitle"></div>
 
-  <label>每页字数 (page_size)</label>
-  <input id="charsPerPage" type="number" min="20" max="80" step="1" />
+  <label>每页最多字数 (page_size 上限)</label>
+  <input id="charsPerPage" type="number" min="20" max="120" step="1" />
+  <div class="hint">实际每页字数随菜单栏可用宽度自动变短或变长，此项仅为上限</div>
 
   <label>编码</label>
   <select id="encoding">
@@ -140,7 +141,7 @@
     function apply(data) {
       document.getElementById('novelPath').value = data.novelPath || ''
       document.getElementById('novelTitle').textContent = data.novelTitle || ''
-      document.getElementById('charsPerPage').value = data.charsPerPage ?? 20
+      document.getElementById('charsPerPage').value = data.charsPerPage ?? 80
       document.getElementById('encoding').value = data.preferredEncoding || 'auto'
       document.getElementById('moyuText').value = data.moyuText ?? '工作中'
       document.getElementById('showPageNumber').checked = !!data.showPageNumber

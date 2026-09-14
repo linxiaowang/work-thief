@@ -11,7 +11,7 @@ const SETTINGS_KEY = 'app_settings'
 const MIGRATED_PAGE_NUMBER_OFF_KEY = 'migrated_page_number_off'
 
 const MIN_CHARS = 20
-const MAX_CHARS = 80
+const MAX_CHARS = 120
 
 function defaultSettings(): AppSettings {
   return { ...DEFAULT_APP_SETTINGS, watchedFolder: null }

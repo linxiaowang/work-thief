@@ -1,4 +1,4 @@
-import { app, Menu, Notification } from 'electron'
+import { app, Menu, Notification, screen } from 'electron'
 import { getDb, closeDb } from './db/client'
 import { listBooks } from './db/books'
 import {
@@ -20,7 +20,9 @@ import {
   prevPage,
   setChooseNovelHandler,
   setRightClickHandler,
-  syncChapterIndexForMenu
+  syncChapterIndexForMenu,
+  reloadPagination,
+  invalidatePaginationForDisplayChange
 } from './menuBar'
 import { buildContextMenu } from './menuBuilder'
 import { chooseNovel } from './chooseNovel'
@@ -98,6 +100,16 @@ app.whenReady().then(async () => {
 
     app.on('activate', () => {
       refreshContextMenu()
+    })
+
+    let displayRelayoutTimer: ReturnType<typeof setTimeout> | null = null
+    screen.on('display-metrics-changed', () => {
+      if (displayRelayoutTimer) clearTimeout(displayRelayoutTimer)
+      displayRelayoutTimer = setTimeout(() => {
+        displayRelayoutTimer = null
+        invalidatePaginationForDisplayChange()
+        void reloadPagination()
+      }, 800)
     })
   } catch (err) {
     console.error('[WorkThief] whenReady bootstrap failed:', err)

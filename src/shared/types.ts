@@ -46,7 +46,7 @@ export interface AppSettings {
   hotkeyPrevChapter: string
   hotkeyToggleHidden: string
   watchedFolder: string | null
-  /** Characters shown per menu-bar "page" (Thief page_size). */
+  /** Upper bound for chars per page; actual count adapts to menu-bar width. */
   charsPerPage: number
   /** Boss Key disguise text (Thief moyu_text). Default 「工作中」; empty → show current HH:mm. */
   moyuText: string
@@ -64,7 +64,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkeyPrevChapter: '',
   hotkeyToggleHidden: 'CommandOrControl+Alt+M',
   watchedFolder: null,
-  charsPerPage: 20,
+  charsPerPage: 80,
   moyuText: '工作中',
   showPageNumber: false,
   preferredEncoding: 'auto'
