@@ -1,5 +1,4 @@
-import { Tray, nativeImage, app } from 'electron'
-import { join } from 'node:path'
+import { Tray, nativeImage } from 'electron'
 import { getBook, updateBookParseMeta } from './db/books'
 import { listChapters, getChapter, replaceChapters } from './db/chapters'
 import { getProgress, upsertProgress } from './db/progress'
@@ -33,7 +32,7 @@ import {
 /**
  * MenuBar — owns the macOS menu bar item and all reading state.
  *
- * Tray icon stays put. Title shows the current book-wide page.
+ * Title-only menu bar item (no tray icon). Title shows the current book-wide page.
  * Boss Key toggles novel text ↔ disguise (moyu_text), never blank-only.
  *
  * Page hot path is sync when pages are cached: next/prev only bump
@@ -55,12 +54,6 @@ const EMPTY_HINT = 'WorkThief · 选 txt'
 const PERSIST_DEBOUNCE_MS = 800
 /** Left-click / nextPage debounce so one physical click ≠ two page turns. */
 const NEXT_PAGE_DEBOUNCE_MS = 80
-
-/**
- * 16×16 teal/orange book + white W — non-template color fallback.
- */
-const EMBEDDED_COLOR_PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAtElEQVR4XmNgoAYQsbH5Tw6G2w3SfCdO7P/5VIX/OpOn/tedPO2/3uQpeNkgPVgN+A8E/EuX/hdYuvg/39IlWNkgNXgN0J0EdMEkoAsmAV2DhU3QAP7lQBcsB7pgOdAFWNgEDdCdCHTBRKALJk4FqQUDEBsmTtAA/mVAFyxbDNaIi40/DICxALYVLUZAYqDYIegCkAJcsQDz0hCKBeQYISoW+JYB4x4aC/jYGGFAUWaiJEcDAFrfzjkeNFsnAAAAAElFTkSuQmCC'
 
 let tray: Tray | null = null
 let state: MenuBarState | null = null
@@ -91,60 +84,13 @@ export function setRightClickHandler(fn: () => void): void {
   onRightClickMenu = fn
 }
 
-function resolveTrayIcon(): Electron.NativeImage | null {
-  // Prefer small tray assets only — NEVER the 1024×1024 app icon (resources/icon.png).
-  const candidates = [
-    join(process.cwd(), 'resources/tray-icon.png'),
-    join(app.getAppPath(), 'resources/tray-icon.png'),
-    join(__dirname, '../../resources/tray-icon.png'),
-    join(process.cwd(), 'resources/iconTemplate.png'),
-    join(app.getAppPath(), 'resources/iconTemplate.png'),
-    join(__dirname, '../../resources/iconTemplate.png')
-  ]
-
-  for (const path of candidates) {
-    const icon = nativeImage.createFromPath(path)
-    console.log(`[WorkThief] tray icon candidate: ${path} isEmpty=${icon.isEmpty()}`)
-    if (!icon.isEmpty()) {
-      if (path.includes('iconTemplate')) {
-        icon.setTemplateImage(true)
-      }
-      console.log(
-        `[WorkThief] tray icon chosen: ${path} isEmpty=${icon.isEmpty()} template=${path.includes('iconTemplate')}`
-      )
-      return icon
-    }
-  }
-
-  const icon = nativeImage.createFromDataURL(EMBEDDED_COLOR_PNG)
-  console.log(`[WorkThief] tray icon chosen: <embedded-color-fallback> isEmpty=${icon.isEmpty()}`)
-  if (icon.isEmpty()) return null
-  return icon
-}
-
 export function initTray(): void {
-  // Reliable macOS text status-item: create with empty image FIRST, then setTitle.
+  // macOS text status item: empty image + setTitle (no menu bar icon).
   tray = new Tray(nativeImage.createEmpty())
   tray.setIgnoreDoubleClickEvents(true)
   tray.setToolTip('WorkThief')
   setTrayTitle(EMPTY_HINT)
   console.log(`[WorkThief] tray title after setTitle: ${JSON.stringify(tray.getTitle())}`)
-
-  try {
-    let icon = resolveTrayIcon()
-    if (icon && !icon.isEmpty()) {
-      const size = icon.getSize()
-      if (size.width !== 18 || size.height !== 18) {
-        icon = icon.resize({ width: 18, height: 18 })
-      }
-      tray.setImage(icon)
-      console.log(`[WorkThief] tray setImage after title size=${JSON.stringify(icon.getSize())}`)
-    } else {
-      console.log('[WorkThief] tray keeping empty image; title-only status item')
-    }
-  } catch (err) {
-    console.log('[WorkThief] tray.setImage skipped', err)
-  }
 
   try {
     const b = tray.getBounds()
