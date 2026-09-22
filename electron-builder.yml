@@ -16,7 +16,6 @@ mac:
     - target: dmg
       arch:
         - arm64
-        - x64
   artifactName: ${productName}-Mac.${ext}
   entitlements: resources/entitlements/macos.plist
   hardenedRuntime: false

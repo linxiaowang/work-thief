@@ -1,6 +1,6 @@
 {
   "name": "work-thief",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "macOS menu-bar sneak-reading app \u2014 TXT via Tray.setTitle.",
   "main": "out/main/index.js",
   "type": "module",
@@ -21,7 +21,7 @@
     "setup": "pnpm run setup:electron && pnpm run setup:native",
     "postinstall": "node scripts/setup-native.mjs --postinstall || node scripts/native-hint.mjs",
     "pack": "electron-vite build && electron-builder --mac --dir",
-    "dist": "electron-vite build && electron-builder --mac",
+    "dist": "electron-vite build && electron-builder --mac --arm64",
     "typecheck": "tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
